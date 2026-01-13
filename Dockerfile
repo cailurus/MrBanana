@@ -7,16 +7,21 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json* ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci --omit=dev
 
 # Copy source code
 COPY web/ ./
 
 # Build frontend
-RUN npm run build
+RUN npm run build && npm cache clean --force
 
 # Stage 2: Runtime
 FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
@@ -26,6 +31,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -35,7 +41,7 @@ COPY mr_banana/ mr_banana/
 COPY api/ api/
 
 # Install Python dependencies using pyproject.toml
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir .
 
 # Install Patchright browser (Chromium)
 # Note: You might need to install additional system dependencies for Chromium
