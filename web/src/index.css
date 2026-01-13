@@ -1,0 +1,212 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes mr-banana-gear-spin-open {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(450deg);
+    }
+}
+
+@keyframes mr-banana-broom-sweep {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    25% {
+        transform: rotate(12deg);
+    }
+
+    50% {
+        transform: rotate(-10deg);
+    }
+
+    75% {
+        transform: rotate(8deg);
+    }
+
+    100% {
+        transform: rotate(0deg);
+    }
+}
+
+.mr-banana-gear {
+    transform: rotate(0deg);
+    transition: transform 220ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.mr-banana-gear--open {
+    transform: rotate(90deg);
+}
+
+.mr-banana-gear--spin {
+    animation: mr-banana-gear-spin-open 1000ms cubic-bezier(0.2, 0.9, 0.2, 1) 1;
+    animation-fill-mode: forwards;
+}
+
+.mr-banana-broom {
+    transform-origin: 50% 0%;
+}
+
+.mr-banana-broom--sweep {
+    animation: mr-banana-broom-sweep 650ms ease-in-out 1;
+}
+
+/* Settings panel slide-down animation */
+@keyframes mr-banana-settings-slide-down {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px);
+        max-height: 0;
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 2000px;
+    }
+}
+
+.mr-banana-settings-panel {
+    animation: mr-banana-settings-slide-down 300ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+    overflow: hidden;
+}
+
+/* Chevron bounce animation for "more settings" hint */
+@keyframes mr-banana-chevron-bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(4px);
+    }
+}
+
+.mr-banana-chevron-hint {
+    animation: mr-banana-chevron-bounce 1.5s ease-in-out infinite;
+}
+
+.mr-banana-chevron-hint:hover {
+    animation: none;
+    transform: scale(1.2);
+    transition: transform 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mr-banana-broom--sweep {
+        animation: none;
+    }
+
+    .mr-banana-settings-panel {
+        animation: none;
+    }
+
+    .mr-banana-chevron-hint {
+        animation: none;
+    }
+}
+
+@layer base {
+    :root {
+        --background: 210 20% 98%;
+        --foreground: 222 20% 12%;
+        --card: 0 0% 100%;
+        --card-foreground: 222 20% 12%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 20% 12%;
+        --primary: 212 100% 52%;
+        --primary-foreground: 210 40% 98%;
+        --secondary: 210 20% 94%;
+        --secondary-foreground: 222 20% 12%;
+        --muted: 210 20% 94%;
+        --muted-foreground: 215 12% 44%;
+        --accent: 210 20% 94%;
+        --accent-foreground: 222 20% 12%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214 18% 88%;
+        --input: 214 18% 88%;
+        --ring: 212 100% 52%;
+        --radius: 0.75rem;
+    }
+
+    .dark {
+        --background: 222 18% 9%;
+        --foreground: 210 30% 98%;
+        --card: 222 18% 12%;
+        --card-foreground: 210 30% 98%;
+        --popover: 222 18% 12%;
+        --popover-foreground: 210 30% 98%;
+        --primary: 212 100% 62%;
+        --primary-foreground: 222 18% 12%;
+        --secondary: 222 14% 18%;
+        --secondary-foreground: 210 30% 98%;
+        --muted: 222 14% 18%;
+        --muted-foreground: 215 16% 70%;
+        --accent: 222 14% 18%;
+        --accent-foreground: 210 30% 98%;
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 222 14% 20%;
+        --input: 222 14% 20%;
+        --ring: 212 100% 62%;
+    }
+}
+
+@layer base {
+    html {
+        /* Prevent layout from shifting when content height changes (tab switch). */
+        overflow-y: scroll;
+        scrollbar-gutter: stable;
+    }
+
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+@layer utilities {
+    @keyframes mr-banana-progress-sweep {
+        0% {
+            left: calc(-1 * var(--mr-banana-sweep-width));
+        }
+
+        100% {
+            left: calc(100% + var(--mr-banana-sweep-width));
+        }
+    }
+
+    .mr-banana-progress-indicator {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: calc(-1 * var(--mr-banana-sweep-width));
+        width: var(--mr-banana-sweep-width);
+        --mr-banana-sweep-width: 140px;
+        background: linear-gradient(90deg,
+                transparent,
+                hsl(var(--primary) / 0.35),
+                transparent);
+        animation: mr-banana-progress-sweep 1.2s linear infinite;
+        pointer-events: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .mr-banana-progress-indicator {
+            animation: none;
+        }
+    }
+
+    /* (seasonal UI removed) */
+}
