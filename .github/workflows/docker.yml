@@ -33,3 +33,12 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/mr-banana:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/mr-banana
+          readme-filepath: ./README.md
+          short-description: "Download from Jable.tv and scrape local videos with Web UI"

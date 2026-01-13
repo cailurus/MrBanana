@@ -69,7 +69,7 @@ export default function DirectoryBrowserModal({ isOpen, onClose, onSelect, title
             setCurrentPath('');
             setParentPath(null);
             setDirectories([]);
-            
+
             fetchRoots().then((fetchedRoots) => {
                 // If initialDir is provided and valid, navigate to it
                 if (initialDir) {

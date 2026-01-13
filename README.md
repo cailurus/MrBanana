@@ -84,15 +84,41 @@ Common flags:
 
 ## Docker volume mounts
 
-When running in Docker, you can map local directories into the container:
+When running in Docker, map your host directories into the container. The syntax is `host_path:container_path`.
+
+### Example: Single data directory
+
+If you want all downloads and scraping to use one directory:
 
 ```bash
 docker run -d \
+  --name mr-banana \
   -p 8000:8000 \
-  -v /your/local/downloads:/app/downloads \
-  -v /your/local/media:/media \
-  -e ALLOWED_BROWSE_ROOTS="/app/downloads,/media" \
-  yourname/mr-banana:latest
+  -v /volume/data:/data \
+  -e ALLOWED_BROWSE_ROOTS="/data" \
+  cailurus/mr-banana:latest
+```
+
+| Host path | Container path | Description |
+|-----------|----------------|-------------|
+| `/volume/data` | `/data` | Your data directory |
+
+After this setup:
+- Click directory input in web UI → remote directory browser opens
+- You'll see `/data` as the root directory
+- Select paths like `/data/input`, `/data/output`
+- These map to `/volume/data/input`, `/volume/data/output` on your host
+
+### Example: Multiple directories
+
+```bash
+docker run -d \
+  --name mr-banana \
+  -p 8000:8000 \
+  -v /volume/downloads:/downloads \
+  -v /volume/media:/media \
+  -e ALLOWED_BROWSE_ROOTS="/downloads,/media" \
+  cailurus/mr-banana:latest
 ```
 
 The `ALLOWED_BROWSE_ROOTS` environment variable controls which directories users can browse via the web UI when accessing remotely.
