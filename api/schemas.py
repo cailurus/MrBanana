@@ -122,6 +122,10 @@ class ChooseDirectoryRequest(BaseModel):
     initial_dir: str | None = None
 
 
+class ListDirectoryRequest(BaseModel):
+    path: str = Field(..., max_length=MAX_PATH_LENGTH)
+
+
 class OpenPathRequest(BaseModel):
     path: str
     reveal: bool | None = True

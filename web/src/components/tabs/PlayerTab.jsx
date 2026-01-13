@@ -9,7 +9,7 @@ import { t } from '../../i18n';
 import { Card, Input, cn } from '../ui';
 import { useToast } from '../Toast';
 import { InfoTooltip } from '../InfoTooltip';
-import { PlayerDetailModal } from '../modals/PlayerDetailModal';
+import { PlayerDetailModal, DirectoryBrowserModal } from '../modals';
 import { useGearAnimation, playSettingsOpenSfx, stopSettingsOpenSfx } from '../../hooks';
 import { usePlayerStore } from '../../stores';
 import { useScrapeStore } from '../../stores/scrapeStore';
@@ -46,13 +46,14 @@ export function PlayerTab({
 
     // Local UI state
     const [showSettings, setShowSettings] = useState(false);
+    const [showDirBrowser, setShowDirBrowser] = useState(false);
 
     // Animation hooks
     const gearAnim = useGearAnimation();
 
     const playerRootDirEmpty = !String(config.player_root_dir || '').trim();
 
-    // Directory picker
+    // Directory picker - supports native dialog (localhost) or remote browser
     const chooseDirectory = async ({ title, initialDir }) => {
         try {
             const res = await axios.post('/api/system/choose-directory', {
@@ -61,6 +62,10 @@ export function PlayerTab({
             });
             return res?.data?.path || null;
         } catch (err) {
+            // If 403 (not localhost), signal to use remote browser
+            if (err.response?.status === 403) {
+                return null;
+            }
             toast.error('Failed to choose directory: ' + (err.response?.data?.detail || err.message));
             return null;
         }
@@ -80,8 +85,21 @@ export function PlayerTab({
             } catch (err) {
                 // 已在 store 内打印错误
             }
+        } else if (picked === null) {
+            // Native dialog not available - show remote browser
+            setShowDirBrowser(true);
         }
         setDirPickerField(null);
+    };
+
+    const handleDirBrowserSelect = async (path) => {
+        setConfig({ player_root_dir: path });
+        try {
+            await saveConfig();
+            await fetchLibrary();
+        } catch (err) {
+            // 已在 store 内打印错误
+        }
     };
 
     // 初始化加载配置
@@ -205,6 +223,16 @@ export function PlayerTab({
                 playing={detail.playing}
                 onClose={closeDetail}
                 onPlay={startPlaying}
+                tr={tr}
+            />
+
+            {/* Remote Directory Browser Modal */}
+            <DirectoryBrowserModal
+                isOpen={showDirBrowser}
+                onClose={() => setShowDirBrowser(false)}
+                onSelect={handleDirBrowserSelect}
+                title={tr('player.settings.rootDir')}
+                initialDir={config.player_root_dir}
                 tr={tr}
             />
         </div>

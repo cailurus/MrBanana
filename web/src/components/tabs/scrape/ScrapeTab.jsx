@@ -17,7 +17,7 @@ import { ScrapeSettingsPanel } from './ScrapeSettingsPanel';
 import { ScrapeControlBar } from './ScrapeControlBar';
 import { ScrapeLivePreview } from './ScrapeLivePreview';
 import { ScrapeHistoryTable } from './ScrapeHistoryTable';
-import { ScrapeDetailModal } from '../../modals/ScrapeDetailModal';
+import { ScrapeDetailModal, DirectoryBrowserModal } from '../../modals';
 
 export function ScrapeTab({
     uiLang,
@@ -79,6 +79,10 @@ export function ScrapeTab({
     const { spinning: gearSpin, start: startGearSpin, isAnimating: isGearAnimating } = useGearAnimation();
     const { sweeping: broomSweep, start: startBroomSweep } = useBroomAnimation();
 
+    // Directory browser state for remote access
+    const [showDirBrowser, setShowDirBrowser] = React.useState(false);
+    const [dirBrowserTarget, setDirBrowserTarget] = React.useState(null); // 'input' or 'output'
+
     // stableStringify for config comparison
     const stableStringify = (obj) => {
         if (obj === null || obj === undefined) return String(obj);
@@ -102,7 +106,7 @@ export function ScrapeTab({
     const latestJob = getLatestJob();
     const isRunning = hasRunningJob();
 
-    // Choose directory helper
+    // Choose directory helper - supports native dialog (localhost) or remote browser
     const chooseDirectory = async ({ title, initialDir }) => {
         try {
             const res = await axios.post('/api/system/choose-directory', {
@@ -111,6 +115,10 @@ export function ScrapeTab({
             });
             return res?.data?.path || null;
         } catch (err) {
+            // If 403 (not localhost), signal to use remote browser
+            if (err.response?.status === 403) {
+                return null;
+            }
             toast.error('Failed to choose directory: ' + (err.response?.data?.detail || err.message));
             return null;
         }
@@ -123,7 +131,13 @@ export function ScrapeTab({
             title: tr('scrape.dirPicker.inputTitle'),
             initialDir: config.scrape_dir,
         });
-        if (picked) setConfig({ scrape_dir: picked });
+        if (picked) {
+            setConfig({ scrape_dir: picked });
+        } else if (picked === null) {
+            // Native dialog not available - show remote browser
+            setDirBrowserTarget('input');
+            setShowDirBrowser(true);
+        }
         setDirPickerField(null);
     };
 
@@ -133,8 +147,22 @@ export function ScrapeTab({
             title: tr('scrape.dirPicker.outputTitle'),
             initialDir: config.scrape_output_dir || config.scrape_dir,
         });
-        if (picked) setConfig({ scrape_output_dir: picked });
+        if (picked) {
+            setConfig({ scrape_output_dir: picked });
+        } else if (picked === null) {
+            // Native dialog not available - show remote browser
+            setDirBrowserTarget('output');
+            setShowDirBrowser(true);
+        }
         setDirPickerField(null);
+    };
+
+    const handleDirBrowserSelect = (path) => {
+        if (dirBrowserTarget === 'input') {
+            setConfig({ scrape_dir: path });
+        } else if (dirBrowserTarget === 'output') {
+            setConfig({ scrape_output_dir: path });
+        }
     };
 
     // Toggle settings with animation
@@ -423,6 +451,16 @@ export function ScrapeTab({
                 open={detail.open}
                 item={detail.item}
                 onClose={closeDetail}
+                tr={tr}
+            />
+
+            {/* Remote Directory Browser Modal */}
+            <DirectoryBrowserModal
+                isOpen={showDirBrowser}
+                onClose={() => setShowDirBrowser(false)}
+                onSelect={handleDirBrowserSelect}
+                title={dirBrowserTarget === 'input' ? tr('scrape.dirPicker.inputTitle') : tr('scrape.dirPicker.outputTitle')}
+                initialDir={dirBrowserTarget === 'input' ? config.scrape_dir : config.scrape_output_dir}
                 tr={tr}
             />
         </div>

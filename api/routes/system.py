@@ -8,8 +8,33 @@ import sys
 
 from curl_cffi import requests
 from fastapi import APIRouter, HTTPException, Request
+from typing import List
 
-from api.schemas import ChooseDirectoryRequest, OpenPathRequest
+from api.schemas import ChooseDirectoryRequest, ListDirectoryRequest, OpenPathRequest
+
+# Allowed root directories for remote browsing (can be overridden by env var)
+# Format: comma-separated paths, e.g., "/downloads,/media,/movies"
+_ALLOWED_BROWSE_ROOTS: List[str] = []
+
+def _get_allowed_roots() -> List[str]:
+    """Get allowed root directories for remote browsing."""
+    global _ALLOWED_BROWSE_ROOTS
+    if not _ALLOWED_BROWSE_ROOTS:
+        env_roots = os.environ.get("ALLOWED_BROWSE_ROOTS", "/app/downloads,/downloads,/media,/data")
+        _ALLOWED_BROWSE_ROOTS = [r.strip() for r in env_roots.split(",") if r.strip()]
+    return _ALLOWED_BROWSE_ROOTS
+
+def _is_path_allowed(path: str) -> bool:
+    """Check if path is under one of the allowed root directories."""
+    try:
+        resolved = Path(path).resolve()
+        for root in _get_allowed_roots():
+            root_resolved = Path(root).resolve()
+            if root_resolved.exists() and (resolved == root_resolved or root_resolved in resolved.parents):
+                return True
+        return False
+    except Exception:
+        return False
 
 router = APIRouter()
 
@@ -99,6 +124,55 @@ async def choose_directory(payload: ChooseDirectoryRequest, http_request: Reques
 
     selected = _choose_directory_native(payload.title, payload.initial_dir)
     return {"path": selected}
+
+
+@router.get("/api/system/browse-roots")
+async def get_browse_roots():
+    """Get list of allowed root directories for remote browsing."""
+    roots = []
+    for root in _get_allowed_roots():
+        p = Path(root)
+        if p.exists() and p.is_dir():
+            roots.append({"path": str(p.resolve()), "name": p.name or str(p)})
+    return {"roots": roots}
+
+
+@router.post("/api/system/list-directory")
+async def list_directory(payload: ListDirectoryRequest):
+    """List subdirectories in a given path (for remote directory browsing)."""
+    path = payload.path
+    
+    # Security check: must be under allowed roots
+    if not _is_path_allowed(path):
+        raise HTTPException(status_code=403, detail="Access denied: path is not under allowed browse roots")
+    
+    p = Path(path).resolve()
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Directory not found")
+    if not p.is_dir():
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+    
+    try:
+        items = []
+        for item in sorted(p.iterdir()):
+            if item.is_dir() and not item.name.startswith('.'):
+                items.append({
+                    "name": item.name,
+                    "path": str(item.resolve()),
+                })
+        
+        # Get parent path if it's still under allowed roots
+        parent = None
+        if p.parent != p and _is_path_allowed(str(p.parent)):
+            parent = str(p.parent.resolve())
+        
+        return {
+            "current": str(p),
+            "parent": parent,
+            "directories": items,
+        }
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
 
 
 @router.get("/api/system/test-source")

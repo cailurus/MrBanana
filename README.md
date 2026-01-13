@@ -80,6 +80,22 @@ Common flags:
 |------|-------------|---------|
 | `LOG_LEVEL` | Log level | `INFO` |
 | `MR_BANANA_LOG_LEVEL` | Overrides log level | `INFO` |
+| `ALLOWED_BROWSE_ROOTS` | Comma-separated paths for remote directory browsing | `/app/downloads,/downloads,/media,/data` |
+
+## Docker volume mounts
+
+When running in Docker, you can map local directories into the container:
+
+```bash
+docker run -d \
+  -p 8000:8000 \
+  -v /your/local/downloads:/app/downloads \
+  -v /your/local/media:/media \
+  -e ALLOWED_BROWSE_ROOTS="/app/downloads,/media" \
+  yourname/mr-banana:latest
+```
+
+The `ALLOWED_BROWSE_ROOTS` environment variable controls which directories users can browse via the web UI when accessing remotely.
 
 ## License
 

@@ -4,3 +4,4 @@
 
 export { ScrapeDetailModal } from './ScrapeDetailModal';
 export { PlayerDetailModal } from './PlayerDetailModal';
+export { default as DirectoryBrowserModal } from './DirectoryBrowserModal';

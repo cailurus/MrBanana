@@ -17,6 +17,7 @@ import { BrushCleaningIcon } from '../Icons';
 import { useGearAnimation, useBroomAnimation, playSettingsOpenSfx, stopSettingsOpenSfx, playBrushCleanSfx } from '../../hooks';
 import { useDownloadStore } from '../../stores';
 import { useScrapeStore } from '../../stores/scrapeStore';
+import { DirectoryBrowserModal } from '../modals';
 
 /**
  * Merge history and active tasks into unified rows
@@ -118,6 +119,7 @@ export function DownloadTab({
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [advancedTab, setAdvancedTab] = useState('download');
     const [clearing, setClearing] = useState(false);
+    const [showDirBrowser, setShowDirBrowser] = useState(false);
 
     // Animation hooks
     const gearAnim = useGearAnimation();
@@ -128,7 +130,7 @@ export function DownloadTab({
 
     const outputDirEmpty = !String(config.outputDir || '').trim();
 
-    // Directory picker
+    // Directory picker - supports native dialog (localhost) or remote browser
     const chooseDirectory = async ({ title, initialDir }) => {
         try {
             const res = await axios.post('/api/system/choose-directory', {
@@ -137,6 +139,10 @@ export function DownloadTab({
             });
             return res?.data?.path || null;
         } catch (err) {
+            // If 403 (not localhost), open remote directory browser
+            if (err.response?.status === 403) {
+                return null; // Signal to use remote browser
+            }
             toast.error('Failed to choose directory: ' + (err.response?.data?.detail || err.message));
             return null;
         }
@@ -148,8 +154,17 @@ export function DownloadTab({
             title: '选择下载输出目录',
             initialDir: config.outputDir,
         });
-        if (picked) setConfig({ outputDir: picked });
+        if (picked) {
+            setConfig({ outputDir: picked });
+        } else if (picked === null) {
+            // Native dialog not available - show remote browser
+            setShowDirBrowser(true);
+        }
         setDirPickerField(null);
+    };
+
+    const handleDirBrowserSelect = (path) => {
+        setConfig({ outputDir: path });
     };
 
     // Normalize jable URL input
@@ -602,6 +617,16 @@ export function DownloadTab({
                     </div>
                 </Card>
             </div>
+
+            {/* Remote Directory Browser Modal */}
+            <DirectoryBrowserModal
+                isOpen={showDirBrowser}
+                onClose={() => setShowDirBrowser(false)}
+                onSelect={handleDirBrowserSelect}
+                title={tr('download.settings.outputDir')}
+                initialDir={config.outputDir}
+                tr={tr}
+            />
         </div>
     );
 }
