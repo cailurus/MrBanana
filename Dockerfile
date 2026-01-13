@@ -1,13 +1,13 @@
 # Stage 1: Build Frontend
-FROM node:18-alpine as frontend-builder
+FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/web
 
 # Copy package files
 COPY web/package.json web/package-lock.json* ./
 
-# Install dependencies
-RUN npm ci --omit=dev
+# Install dependencies (need devDependencies for build)
+RUN npm ci
 
 # Copy source code
 COPY web/ ./
