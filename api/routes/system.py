@@ -13,14 +13,14 @@ from typing import List
 from api.schemas import ChooseDirectoryRequest, ListDirectoryRequest, OpenPathRequest
 
 # Allowed root directories for remote browsing (can be overridden by env var)
-# Format: comma-separated paths, e.g., "/downloads,/media,/movies"
+# Format: comma-separated paths, e.g., "/data,/media"
 _ALLOWED_BROWSE_ROOTS: List[str] = []
 
 def _get_allowed_roots() -> List[str]:
     """Get allowed root directories for remote browsing."""
     global _ALLOWED_BROWSE_ROOTS
     if not _ALLOWED_BROWSE_ROOTS:
-        env_roots = os.environ.get("ALLOWED_BROWSE_ROOTS", "/app/downloads,/downloads,/media,/data")
+        env_roots = os.environ.get("ALLOWED_BROWSE_ROOTS", "/data")
         _ALLOWED_BROWSE_ROOTS = [r.strip() for r in env_roots.split(",") if r.strip()]
     return _ALLOWED_BROWSE_ROOTS
 

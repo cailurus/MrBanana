@@ -80,7 +80,7 @@ Common flags:
 |------|-------------|---------|
 | `LOG_LEVEL` | Log level | `INFO` |
 | `MR_BANANA_LOG_LEVEL` | Overrides log level | `INFO` |
-| `ALLOWED_BROWSE_ROOTS` | Comma-separated paths for remote directory browsing | `/app/downloads,/downloads,/media,/data` |
+| `ALLOWED_BROWSE_ROOTS` | Comma-separated paths for remote directory browsing | `/data` |
 
 ## Docker volume mounts
 
