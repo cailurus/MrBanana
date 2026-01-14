@@ -362,7 +362,8 @@ def scrape_directory(
                         data.setdefault("plot_original", plot)
                         data["plot"] = t
                         merged.data = data
-                        safe_log(f"merged.plot(sanitized)={re.sub(r'\\s+', ' ', t)[:180]!r}")
+                        sanitized_t = re.sub(r'\s+', ' ', t)[:180]
+                        safe_log(f"merged.plot(sanitized)={sanitized_t!r}")
         except Exception:
             pass
 
@@ -370,7 +371,8 @@ def scrape_directory(
         try:
             _p1 = (merged.data or {}).get("plot")
             if isinstance(_p1, str) and _p1.strip():
-                safe_log(f"merged.plot(final)={re.sub(r'\\s+', ' ', _p1.strip())[:180]!r}")
+                final_plot = re.sub(r'\s+', ' ', _p1.strip())[:180]
+                safe_log(f"merged.plot(final)={final_plot!r}")
             else:
                 safe_log("merged.plot(final)=<empty>")
         except Exception:

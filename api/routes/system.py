@@ -139,7 +139,7 @@ async def get_browse_roots():
 
 @router.post("/api/system/list-directory")
 async def list_directory(payload: ListDirectoryRequest):
-    """List subdirectories in a given path (for remote directory browsing)."""
+    """List contents in a given path (for remote directory browsing)."""
     path = payload.path
     
     # Security check: must be under allowed roots
@@ -153,12 +153,22 @@ async def list_directory(payload: ListDirectoryRequest):
         raise HTTPException(status_code=400, detail="Path is not a directory")
     
     try:
-        items = []
+        directories = []
+        files = []
         for item in sorted(p.iterdir()):
-            if item.is_dir() and not item.name.startswith('.'):
-                items.append({
+            if item.name.startswith('.'):
+                continue
+            if item.is_dir():
+                directories.append({
                     "name": item.name,
                     "path": str(item.resolve()),
+                    "type": "directory",
+                })
+            elif item.is_file():
+                files.append({
+                    "name": item.name,
+                    "path": str(item.resolve()),
+                    "type": "file",
                 })
         
         # Get parent path if it's still under allowed roots
@@ -169,7 +179,8 @@ async def list_directory(payload: ListDirectoryRequest):
         return {
             "current": str(p),
             "parent": parent,
-            "directories": items,
+            "directories": directories,
+            "files": files,
         }
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")

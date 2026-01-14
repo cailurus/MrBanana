@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { X, Folder, FolderOpen, ChevronUp, Home, Loader2, AlertCircle } from 'lucide-react';
+import { X, Folder, FolderOpen, ChevronUp, Home, Loader2, AlertCircle, File } from 'lucide-react';
 
 /**
  * Directory Browser Modal for remote directory selection
@@ -29,6 +29,7 @@ export default function DirectoryBrowserModal({ isOpen, onClose, onSelect, title
     const [currentPath, setCurrentPath] = useState('');
     const [parentPath, setParentPath] = useState(null);
     const [directories, setDirectories] = useState([]);
+    const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -53,10 +54,12 @@ export default function DirectoryBrowserModal({ isOpen, onClose, onSelect, title
             setCurrentPath(res.data.current);
             setParentPath(res.data.parent);
             setDirectories(res.data.directories || []);
+            setFiles(res.data.files || []);
         } catch (err) {
             const msg = err.response?.data?.detail || translate('directoryBrowser.errorListing');
             setError(msg);
             setDirectories([]);
+            setFiles([]);
         } finally {
             setLoading(false);
         }
@@ -69,6 +72,7 @@ export default function DirectoryBrowserModal({ isOpen, onClose, onSelect, title
             setCurrentPath('');
             setParentPath(null);
             setDirectories([]);
+            setFiles([]);
 
             fetchRoots().then((fetchedRoots) => {
                 // If initialDir is provided and valid, navigate to it
@@ -200,16 +204,17 @@ export default function DirectoryBrowserModal({ isOpen, onClose, onSelect, title
                                 ))}
                             </div>
                         </div>
-                    ) : directories.length === 0 ? (
+                    ) : (directories.length === 0 && files.length === 0) ? (
                         <div className="flex items-center justify-center h-full py-8 text-gray-500">
                             <span className="text-sm">{translate('directoryBrowser.empty')}</span>
                         </div>
                     ) : (
-                        /* Directory Listing */
+                        /* Directory and File Listing */
                         <div className="p-2">
+                            {/* Directories - clickable to navigate */}
                             {directories.map((dir, idx) => (
                                 <button
-                                    key={idx}
+                                    key={`dir-${idx}`}
                                     onClick={() => handleSelectDir(dir)}
                                     className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-700 transition-colors text-left"
                                 >
@@ -218,6 +223,18 @@ export default function DirectoryBrowserModal({ isOpen, onClose, onSelect, title
                                         {dir.name}
                                     </span>
                                 </button>
+                            ))}
+                            {/* Files - display only, not clickable */}
+                            {files.map((file, idx) => (
+                                <div
+                                    key={`file-${idx}`}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-left opacity-60"
+                                >
+                                    <File className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                    <span className="text-sm text-gray-400 truncate">
+                                        {file.name}
+                                    </span>
+                                </div>
                             ))}
                         </div>
                     )}
