@@ -8,7 +8,7 @@ from urllib.parse import quote_plus, urljoin, urlparse
 from curl_cffi import requests
 
 from ..types import CrawlResult, MediaInfo
-from .base import BaseCrawler
+from .base import BaseCrawler, extract_jav_code
 
 
 @dataclass
@@ -76,26 +76,7 @@ class JavdbCrawler(BaseCrawler):
             return None
 
     def _extract_code(self, file_path: Path) -> str | None:
-        stem = file_path.stem.strip()
-        if not stem:
-            return None
-        # Exact match: waaa-585 / ssis-001
-        if re.fullmatch(r"[A-Za-z0-9]+-[A-Za-z0-9]+", stem):
-            return stem
-        # Extract code from filename with extra content, e.g. "ABC-123 1080P" -> "ABC-123"
-        # Common patterns:
-        # - "ABC-123 xxx yyy" (code at start)
-        # - "xxx ABC-123 yyy" (code in middle)
-        # - "[xxx] ABC-123 yyy" (code after bracket)
-        # Match common JAV code patterns: 2-6 letters + hyphen + 2-5 digits
-        match = re.search(r"(?<![A-Za-z])([A-Za-z]{2,6})-(\d{2,5})(?![A-Za-z0-9-])", stem, re.IGNORECASE)
-        if match:
-            return f"{match.group(1).upper()}-{match.group(2)}"
-        # Also support patterns without hyphen like "ABC123" -> "ABC-123"
-        match = re.search(r"(?<![A-Za-z])([A-Za-z]{2,6})(\d{2,5})(?![A-Za-z0-9])", stem, re.IGNORECASE)
-        if match:
-            return f"{match.group(1).upper()}-{match.group(2)}"
-        return None
+        return extract_jav_code(file_path)
 
     def _find_first_detail_url(self, html: str, code: str) -> str | None:
         try:

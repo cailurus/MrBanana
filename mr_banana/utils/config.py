@@ -105,9 +105,11 @@ class AppConfig:
     scrape_nfo_fields: list[str] = field(default_factory=list)
 
     # --- Translation (optional) ---
-    scrape_translate_enabled: bool = False
+    scrape_translate_enabled: bool = True
     # Providers: google | microsoft | deepl
     scrape_translate_provider: str = "google"
+    # Source language: ja (Japanese) by default
+    scrape_translate_source_lang: str = "ja"
     # Target language: en | zh-CN | zh-TW
     scrape_translate_target_lang: str = "zh-CN"
     # Advanced/compat fields:

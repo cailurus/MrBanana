@@ -94,8 +94,9 @@ export const DEFAULT_SCRAPE_CONFIG = {
     scrape_nfo_skip_fields: [],
 
     // Translation settings
-    scrape_translate_enabled: false,
-    scrape_translate_provider: '',
+    scrape_translate_enabled: true,
+    scrape_translate_provider: 'google',
+    scrape_translate_source_lang: 'ja',
     scrape_translate_api_url: '',
     scrape_translate_api_key: '',
     scrape_translate_fields: [],

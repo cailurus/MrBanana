@@ -13,9 +13,17 @@ export function extractCodeFromPath(path) {
     const s = String(path || '').trim();
     if (!s) return '-';
     const name = s.split('/').pop() || s;
-    const stem = name.replace(/\.[^/.]+$/, '');
-    const m = stem.match(/[A-Za-z0-9]+-[A-Za-z0-9]+/);
-    return (m && m[0]) ? m[0].toUpperCase() : '-';
+    let stem = name.replace(/\.[^/.]+$/, '');
+    if (!stem) return '-';
+    // Clean up common prefixes like "4k2.me@", "xxx@", etc.
+    stem = stem.replace(/^[A-Za-z0-9._-]*@/, '');
+    // Match JAV code pattern: 2-6 letters + hyphen + 2-5 digits (ignore suffix like -C, ch, etc.)
+    let m = stem.match(/(?<![A-Za-z])([A-Za-z]{2,6})-(\d{2,5})(?=[^0-9]|$)/i);
+    if (m) return `${m[1].toUpperCase()}-${m[2]}`;
+    // Also support patterns without hyphen like "ABC123" -> "ABC-123"
+    m = stem.match(/(?<![A-Za-z])([A-Za-z]{2,6})(\d{2,5})(?=[^0-9]|$)/i);
+    if (m) return `${m[1].toUpperCase()}-${m[2]}`;
+    return '-';
 }
 
 export function formatDateTime(value) {
