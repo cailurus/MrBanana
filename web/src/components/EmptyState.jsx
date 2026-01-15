@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, FolderSearch, Inbox, Search, FileQuestion } from 'lucide-react';
+import { Download, FolderSearch, Inbox, Search, FileQuestion, Bell } from 'lucide-react';
 import { cn } from './ui';
 
 /**
@@ -20,6 +20,11 @@ const EMPTY_STATE_CONFIG = {
         icon: Search,
         iconColor: 'text-purple-400 dark:text-purple-500',
         bgGradient: 'from-purple-500/5 to-transparent',
+    },
+    subscription: {
+        icon: Bell,
+        iconColor: 'text-amber-400 dark:text-amber-500',
+        bgGradient: 'from-amber-500/5 to-transparent',
     },
     inbox: {
         icon: Inbox,

@@ -4,7 +4,7 @@
  */
 import React, { useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
-import { History, Download, Settings, ChevronDown, AlertCircle } from 'lucide-react';
+import { History, Download, Settings, ChevronDown, AlertCircle, Search, Copy, Check, ExternalLink, Magnet, Play, Clock, Users, Tag, Building, Film, Loader2, Plus, Bell } from 'lucide-react';
 import { t } from '../../i18n';
 import { Button, Card, Input, Select, cn } from '../ui';
 import { clamp, extractCodeFromUrl, formatDateTime } from '../../utils/format';
@@ -88,6 +88,274 @@ function useMergedRows(history, activeTasks) {
 }
 
 /**
+ * MagnetLinkItem - Individual magnet link display
+ */
+function MagnetLinkItem({ magnet, tr }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(magnet.url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy', err);
+        }
+    };
+
+    return (
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+            <Magnet className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate" title={magnet.name}>
+                    {magnet.name}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {magnet.size && <span>{magnet.size}</span>}
+                    {magnet.is_hd && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                            {tr('download.search.hd')}
+                        </span>
+                    )}
+                    {magnet.has_subtitle && (
+                        <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">
+                            {tr('download.search.subtitle')}
+                        </span>
+                    )}
+                </div>
+            </div>
+            <button
+                type="button"
+                onClick={handleCopy}
+                className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
+                    copied
+                        ? 'bg-green-500/20 text-green-600 dark:text-green-400'
+                        : 'bg-primary/10 text-primary hover:bg-primary/20'
+                )}
+            >
+                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {copied ? tr('download.search.copied') : tr('download.search.copyMagnet')}
+            </button>
+        </div>
+    );
+}
+
+/**
+ * SearchResultPreview - Display search results
+ */
+function SearchResultPreview({ result, tr, onDownloadFromJable, downloading, outputDirEmpty, onAddToSubscription, addingToSubscription }) {
+    if (!result) return null;
+
+    // Not found state
+    if (!result.found) {
+        return (
+            <Card className="p-6">
+                <div className="text-center py-8">
+                    <Search className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <h3 className="text-lg font-medium text-muted-foreground">
+                        {tr('download.search.notFound')}
+                    </h3>
+                    <p className="text-sm text-muted-foreground/70 mt-1">
+                        {tr('download.search.notFoundHint')}
+                    </p>
+                </div>
+            </Card>
+        );
+    }
+
+    return (
+        <Card className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Search className="h-5 w-5 text-primary" />
+                    {tr('download.search.title')}
+                </h3>
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={onAddToSubscription}
+                        disabled={addingToSubscription}
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        title={tr('download.search.addToSubscription')}
+                    >
+                        {addingToSubscription ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                            <Bell className="h-3 w-3" />
+                        )}
+                        {tr('download.search.addToSubscription')}
+                    </button>
+                    {result.javdb_found && result.javdb_url && (
+                        <a
+                            href={result.javdb_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                            <ExternalLink className="h-3 w-3" />
+                            {tr('download.search.viewOnJavdb')}
+                        </a>
+                    )}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+                {/* Left: Cover Image */}
+                <div className="space-y-3">
+                    {result.cover_url ? (
+                        <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted">
+                            <img
+                                src={result.cover_url}
+                                alt={result.title || result.code}
+                                className="w-[200%] h-full object-cover object-right"
+                                onError={(e) => {
+                                    e.target.style.display = 'none';
+                                }}
+                            />
+                        </div>
+                    ) : (
+                        <div className="aspect-[2/3] rounded-lg bg-muted flex items-center justify-center">
+                            <Film className="h-16 w-16 text-muted-foreground/30" />
+                        </div>
+                    )}
+
+                    {/* Jable Download Button */}
+                    <div className="space-y-2">
+                        {result.jable_available ? (
+                            <Button
+                                className="w-full"
+                                onClick={onDownloadFromJable}
+                                disabled={downloading || outputDirEmpty}
+                            >
+                                <Download className="h-4 w-4 mr-2" />
+                                {downloading ? tr('download.input.starting') : tr('download.search.downloadFromJable')}
+                                {outputDirEmpty && (
+                                    <AlertCircle className="ml-2 h-4 w-4 text-amber-500" title={tr('download.error.noOutputDir')} />
+                                )}
+                            </Button>
+                        ) : (
+                            <Button className="w-full" disabled variant="secondary">
+                                <Download className="h-4 w-4 mr-2" />
+                                {tr('download.search.jableNotAvailable')}
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right: Metadata */}
+                <div className="space-y-4">
+                    {/* Title & Code */}
+                    <div>
+                        <div className="text-xl font-bold">{result.code}</div>
+                        {result.title && result.title !== result.code && (
+                            <div className="text-sm text-muted-foreground mt-1">{result.title}</div>
+                        )}
+                    </div>
+
+                    {/* Metadata Grid */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                        {result.release && (
+                            <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">{tr('download.search.release')}:</span>
+                                <span>{result.release}</span>
+                            </div>
+                        )}
+                        {result.runtime && (
+                            <div className="flex items-center gap-2">
+                                <Play className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">{tr('download.search.runtime')}:</span>
+                                <span>{result.runtime} {tr('download.search.minutes')}</span>
+                            </div>
+                        )}
+                        {result.studio && (
+                            <div className="flex items-center gap-2">
+                                <Building className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">{tr('download.search.studio')}:</span>
+                                <span>{result.studio}</span>
+                            </div>
+                        )}
+                        {result.series && (
+                            <div className="flex items-center gap-2">
+                                <Film className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">{tr('download.search.series')}:</span>
+                                <span>{result.series}</span>
+                            </div>
+                        )}
+                        {result.rating && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground">{tr('download.search.rating')}:</span>
+                                <span className="text-amber-500">★ {result.rating}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Actors */}
+                    {result.actors && result.actors.length > 0 && (
+                        <div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                                <Users className="h-4 w-4" />
+                                {tr('download.search.actors')}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {result.actors.map((actor, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs"
+                                    >
+                                        {actor}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tags */}
+                    {result.tags && result.tags.length > 0 && (
+                        <div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                                <Tag className="h-4 w-4" />
+                                {tr('download.search.tags')}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {result.tags.map((tag, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="px-2 py-1 rounded bg-muted text-xs text-muted-foreground"
+                                    >
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Magnet Links */}
+                    <div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                            <Magnet className="h-4 w-4" />
+                            {tr('download.search.magnetLinks')}
+                        </div>
+                        {result.magnet_links && result.magnet_links.length > 0 ? (
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                                {result.magnet_links.map((magnet, idx) => (
+                                    <MagnetLinkItem key={idx} magnet={magnet} tr={tr} />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-sm text-muted-foreground/70 p-3 rounded-lg bg-muted/30">
+                                {tr('download.search.noMagnet')}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </Card>
+    );
+}
+
+/**
  * DownloadTab Component
  */
 export function DownloadTab({
@@ -109,6 +377,12 @@ export function DownloadTab({
         configSaving, setConfigSaving,
         fetchHistory,
         clearHistory,
+        // Search state
+        searchQuery, setSearchQuery,
+        searchResult, setSearchResult,
+        searching,
+        search,
+        clearSearchResult,
     } = useDownloadStore();
 
     // Get scrape config for sync before download-then-scrape
@@ -120,6 +394,8 @@ export function DownloadTab({
     const [advancedTab, setAdvancedTab] = useState('download');
     const [clearing, setClearing] = useState(false);
     const [showDirBrowser, setShowDirBrowser] = useState(false);
+    const [downloadingFromJable, setDownloadingFromJable] = useState(false);
+    const [addingToSubscription, setAddingToSubscription] = useState(false);
 
     // Animation hooks
     const gearAnim = useGearAnimation();
@@ -167,35 +443,30 @@ export function DownloadTab({
         setConfig({ outputDir: path });
     };
 
-    // Normalize jable URL input
-    const normalizeJableInput = (value) => {
-        const s = String(value || '').trim();
-        if (!s) return '';
-        const lowered = s.toLowerCase();
-        if (lowered.includes('jable.tv')) {
-            if (lowered.startsWith('http://') || lowered.startsWith('https://')) return s;
-            return `https://${s.replace(/^\/+/, '')}`;
-        }
-        if (lowered.startsWith('http://') || lowered.startsWith('https://')) return s;
-        const code = s.replace(/\s+/g, '').toLowerCase();
-        return `https://jable.tv/videos/${code}/`;
-    };
-
-    // Download handler
-    const handleDownload = async (e) => {
+    // Search handler
+    const handleSearch = async (e) => {
         e.preventDefault();
-        if (!url) return;
-
-        const payloadUrl = normalizeJableInput(url);
-        setLoading(true);
+        if (!searchQuery.trim()) return;
 
         try {
-            const out = String(config.outputDir || '').trim();
-            if (!out) {
-                toast.error(t(uiLang, 'download.error.noOutputDir'));
-                return;
-            }
+            await search(searchQuery.trim());
+        } catch (err) {
+            toast.error('搜索失败: ' + (err.response?.data?.detail || err.message));
+        }
+    };
 
+    // Download from Jable handler
+    const handleDownloadFromJable = async () => {
+        if (!searchResult?.jable_url || downloadingFromJable) return;
+
+        const out = String(config.outputDir || '').trim();
+        if (!out) {
+            toast.error(t(uiLang, 'download.error.noOutputDir'));
+            return;
+        }
+
+        setDownloadingFromJable(true);
+        try {
             // Sync scrape config if download-then-scrape is enabled
             if (config.scrapeAfter && scrapeConfig) {
                 try {
@@ -211,16 +482,38 @@ export function DownloadTab({
             }
 
             await axios.post('/api/download', {
-                url: payloadUrl,
+                url: searchResult.jable_url,
                 output_dir: out,
                 scrape_after_download: Boolean(config.scrapeAfter),
             });
-            setUrl('');
+            toast.success('下载任务已添加');
             fetchHistory();
         } catch (err) {
-            toast.error('Failed to start download: ' + (err.response?.data?.detail || err.message));
+            toast.error('下载失败: ' + (err.response?.data?.detail || err.message));
         } finally {
-            setLoading(false);
+            setDownloadingFromJable(false);
+        }
+    };
+
+    // Add to subscription handler
+    const handleAddToSubscription = async () => {
+        if (!searchResult?.code || addingToSubscription) return;
+
+        setAddingToSubscription(true);
+        try {
+            await axios.post('/api/subscription', {
+                code: searchResult.code,
+                magnet_links: searchResult.magnet_links || [],
+            });
+            toast.success(tr('download.search.subscriptionAdded'));
+        } catch (err) {
+            if (err.response?.status === 409) {
+                toast.warning(tr('download.search.alreadySubscribed'));
+            } else {
+                toast.error('添加订阅失败: ' + (err.response?.data?.detail || err.message));
+            }
+        } finally {
+            setAddingToSubscription(false);
         }
     };
 
@@ -430,25 +723,45 @@ export function DownloadTab({
                 </Card>
             )}
 
-            {/* Input Section */}
+            {/* Search Section */}
             <Card className="p-6">
-                <form onSubmit={handleDownload} className="space-y-3">
+                <form onSubmit={handleSearch} className="space-y-3">
                     <div className="flex gap-4">
                         <Input
                             placeholder={tr('download.input.urlPlaceholder')}
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             className="flex-1"
                         />
-                        <Button type="submit" disabled={loading || outputDirEmpty}>
-                            {loading ? tr('download.input.starting') : tr('download.input.download')}
-                            {outputDirEmpty && (
-                                <AlertCircle className="ml-2 h-4 w-4 text-amber-500" title={tr('download.error.noOutputDir')} />
+                        <Button type="submit" disabled={searching || !searchQuery.trim()}>
+                            {searching ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    {tr('download.input.starting')}
+                                </>
+                            ) : (
+                                <>
+                                    <Search className="h-4 w-4 mr-2" />
+                                    {tr('download.input.download')}
+                                </>
                             )}
                         </Button>
                     </div>
                 </form>
             </Card>
+
+            {/* Search Result Preview */}
+            {searchResult && (
+                <SearchResultPreview
+                    result={searchResult}
+                    tr={tr}
+                    onDownloadFromJable={handleDownloadFromJable}
+                    downloading={downloadingFromJable}
+                    outputDirEmpty={outputDirEmpty}
+                    onAddToSubscription={handleAddToSubscription}
+                    addingToSubscription={addingToSubscription}
+                />
+            )}
 
             {/* History */}
             <div className="space-y-4">

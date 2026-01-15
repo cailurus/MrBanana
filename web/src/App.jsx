@@ -12,7 +12,7 @@ import { LogViewerModal } from './components/LogViewerModal';
 import { ContextMenu } from './components/ContextMenu';
 import { ThemePicker } from './components/ThemePicker';
 import { LanguagePicker } from './components/LanguagePicker';
-import { DownloadTab, PlayerTab } from './components/tabs';
+import { DownloadTab, PlayerTab, SubscriptionTab } from './components/tabs';
 import { ScrapeTab } from './components/tabs/scrape';
 import { stableStringify } from './utils/appHelpers';
 import { useDownloadStore } from './stores';
@@ -791,6 +791,14 @@ function App() {
                         <Button
                             type="button"
                             className="flex-1 border"
+                            variant={activeTab === 'subscription' ? 'default' : 'ghost'}
+                            onClick={() => setActiveTab('subscription')}
+                        >
+                            {tr('tab.subscription')}
+                        </Button>
+                        <Button
+                            type="button"
+                            className="flex-1 border"
                             variant={activeTab === 'download' ? 'default' : 'ghost'}
                             onClick={() => setActiveTab('download')}
                         >
@@ -814,6 +822,10 @@ function App() {
                         </Button>
                     </div>
                 </div>
+
+                {activeTab === 'subscription' && (
+                    <SubscriptionTab uiLang={uiLang} />
+                )}
 
                 {activeTab === 'download' && (
                     <DownloadTab

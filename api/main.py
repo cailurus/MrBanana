@@ -4,18 +4,32 @@ from fastapi import FastAPI, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 
 from api.routes.download import router as download_router
 from api.routes.library import router as library_router
 from api.routes.player import router as player_router
 from api.routes.scrape import router as scrape_router
+from api.routes.search import router as search_router
+from api.routes.subscription import router as subscription_router
 from api.routes.system import router as system_router
 from api.routes.ws import router as ws_router
 from api.constants import API_VERSION
+from api.scheduler import start_scheduler, stop_scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # Startup
+    start_scheduler()
+    yield
+    # Shutdown
+    stop_scheduler()
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Mr. Banana API", version=API_VERSION)
+    app = FastAPI(title="Mr. Banana API", version=API_VERSION, lifespan=lifespan)
 
     # CORS configuration for internal network use
     # In production, consider restricting to specific origins
@@ -35,6 +49,8 @@ def create_app() -> FastAPI:
     app.include_router(library_router, tags=["library"])
     app.include_router(player_router, tags=["player"])
     app.include_router(scrape_router, tags=["scrape"])
+    app.include_router(search_router, tags=["search"])
+    app.include_router(subscription_router, tags=["subscription"])
     app.include_router(system_router, tags=["system"])
     app.include_router(ws_router, tags=["websocket"])
 

@@ -168,6 +168,48 @@ export const useDownloadStore = create((set, get) => ({
             set({ clearingHistory: false });
         }
     },
+
+    // Search state
+    searchQuery: '',
+    setSearchQuery: (query) => set({ searchQuery: query }),
+
+    searchResult: null,
+    setSearchResult: (result) => set({ searchResult: result }),
+
+    searching: false,
+    setSearching: (searching) => set({ searching }),
+
+    searchError: null,
+    setSearchError: (error) => set({ searchError: error }),
+
+    // Search action
+    search: async (code) => {
+        const { searching } = get();
+        if (searching) return null;
+
+        if (!code || !code.trim()) {
+            set({ searchResult: null, searchError: null });
+            return null;
+        }
+
+        set({ searching: true, searchError: null });
+        try {
+            const res = await axios.get(`/api/search/${encodeURIComponent(code.trim())}`);
+            set({ searchResult: res.data });
+            return res.data;
+        } catch (err) {
+            console.error('Failed to search', err);
+            set({
+                searchError: err.response?.data?.detail || err.message,
+                searchResult: null
+            });
+            throw err;
+        } finally {
+            set({ searching: false });
+        }
+    },
+
+    clearSearchResult: () => set({ searchResult: null, searchError: null, searchQuery: '' }),
 }));
 
 export default useDownloadStore;

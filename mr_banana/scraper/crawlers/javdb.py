@@ -307,6 +307,100 @@ class JavdbCrawler(BaseCrawler):
         if plot and _looks_generic_site_desc(plot):
             plot = ""
 
+        # Extract magnet links
+        magnet_links: list[dict[str, str]] = []
+        try:
+            # JavDB magnet links are in div#magnets-content or similar structure
+            # Each magnet item is typically a div with class containing 'item' or inside magnet-links
+            
+            # Method 1: Try magnets-content section
+            magnets_section = soup.select_one("#magnets-content, .magnet-links")
+            if magnets_section:
+                # Look for all anchor tags with magnet: hrefs
+                for magnet_a in magnets_section.select("a[href^='magnet:']"):
+                    magnet_url = magnet_a.get("href", "")
+                    if not magnet_url:
+                        continue
+                    
+                    # Find parent item container
+                    item_container = magnet_a.find_parent("div", class_=lambda c: c and ("item" in c or "columns" in c))
+                    if not item_container:
+                        item_container = magnet_a.find_parent("div")
+                    
+                    # Extract name from magnet-name span or the anchor text
+                    name = ""
+                    if item_container:
+                        name_el = item_container.select_one(".magnet-name span.name, .magnet-name, span.name, .name")
+                        if name_el:
+                            name = name_el.get_text(" ", strip=True)
+                    if not name:
+                        name = magnet_a.get_text(" ", strip=True) or code
+                    
+                    # Extract size from meta span
+                    size = ""
+                    if item_container:
+                        size_el = item_container.select_one(".meta, span.meta, .size")
+                        if size_el:
+                            size_text = size_el.get_text(" ", strip=True)
+                            size_match = re.search(r"(\d+(?:\.\d+)?\s*(?:GB|MB|TB))", size_text, re.IGNORECASE)
+                            if size_match:
+                                size = size_match.group(1)
+                    
+                    # Check for HD and subtitle tags
+                    is_hd = False
+                    has_subtitle = False
+                    if item_container:
+                        is_hd = bool(item_container.select_one(".tag.is-warning, .is-warning, [class*='hd']"))
+                        has_subtitle = bool(item_container.select_one(".tag.is-info, .is-info, [class*='subtitle'], [class*='字幕']"))
+                    
+                    magnet_links.append({
+                        "url": magnet_url,
+                        "name": name or code,
+                        "size": size,
+                        "is_hd": is_hd,
+                        "has_subtitle": has_subtitle,
+                    })
+            
+            # Method 2: Fallback - search all magnet links on page
+            if not magnet_links:
+                for magnet_a in soup.select("a[href^='magnet:']"):
+                    magnet_url = magnet_a.get("href", "")
+                    if not magnet_url:
+                        continue
+                    # Avoid duplicates
+                    if any(m["url"] == magnet_url for m in magnet_links):
+                        continue
+                    
+                    item_container = magnet_a.find_parent("div")
+                    name = magnet_a.get_text(" ", strip=True) or code
+                    
+                    size = ""
+                    if item_container:
+                        size_text = item_container.get_text(" ", strip=True)
+                        size_match = re.search(r"(\d+(?:\.\d+)?\s*(?:GB|MB|TB))", size_text, re.IGNORECASE)
+                        if size_match:
+                            size = size_match.group(1)
+                    
+                    magnet_links.append({
+                        "url": magnet_url,
+                        "name": name,
+                        "size": size,
+                        "is_hd": False,
+                        "has_subtitle": False,
+                    })
+            
+            # Deduplicate by URL
+            seen_urls = set()
+            unique_magnets = []
+            for m in magnet_links:
+                if m["url"] not in seen_urls:
+                    seen_urls.add(m["url"])
+                    unique_magnets.append(m)
+            magnet_links = unique_magnets
+            
+        except Exception as e:
+            self._emit(f"!! magnet extract error: {e}")
+
         data = {
             "number": code,
             "originaltitle": originaltitle,
@@ -324,6 +418,7 @@ class JavdbCrawler(BaseCrawler):
             "fanart_url": cover_url,
             "preview_urls": preview_urls,
             "trailer_url": trailer_url,
+            "magnet_links": magnet_links,
         }
 
         if rating:
@@ -342,6 +437,36 @@ class JavdbCrawler(BaseCrawler):
         if not code:
             return None
 
+        search_url = f"{self.cfg.base_url}/search?q={quote_plus(code)}&locale=zh"
+        search_html = self._get_text(search_url)
+        if not search_html:
+            return None
+
+        detail_url = self._find_first_detail_url(search_html, code)
+        if not detail_url:
+            return None
+
+        detail_html = self._get_text(detail_url)
+        if not detail_html:
+            return None
+
+        return self._parse_detail(detail_url, detail_html, code)
+
+    def search_by_code(self, code: str) -> CrawlResult | None:
+        """Search by code directly without requiring a file path.
+        
+        Args:
+            code: The video code (e.g., 'ABC-123')
+            
+        Returns:
+            CrawlResult with metadata and magnet links, or None if not found
+        """
+        if not code:
+            return None
+        
+        # Normalize code
+        code = code.strip().upper()
+        
         search_url = f"{self.cfg.base_url}/search?q={quote_plus(code)}&locale=zh"
         search_html = self._get_text(search_url)
         if not search_html:
