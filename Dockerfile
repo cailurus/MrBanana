@@ -21,19 +21,21 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Reduce patchright browser size
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies in single layer
 # ffmpeg: required for video processing
-# curl: for healthchecks or debugging
+# curl: for healthchecks
 # Chromium dependencies: required for patchright/playwright browser
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     ca-certificates \
-    # Chromium dependencies
+    # Chromium dependencies (minimal set)
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -51,31 +53,37 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && apt-get clean \
+    && apt-get autoremove -y
 
-# Copy project files for pip install
+# Copy requirements first for better cache
+COPY requirements.txt ./
+
+# Install Python dependencies using requirements.txt (faster than pyproject.toml)
+RUN pip install --no-cache-dir -r requirements.txt \
+    && rm -rf ~/.cache/pip
+
+# Install Patchright browser (Chromium only, minimal)
+RUN patchright install chromium --with-deps \
+    && rm -rf /root/.cache
+
+# Copy project files
 COPY pyproject.toml README.md ./
 COPY mr_banana/ mr_banana/
 COPY api/ api/
 
-# Install Python dependencies using pyproject.toml
-RUN pip install --no-cache-dir .
-
-# Install Patchright browser (Chromium)
-# Note: You might need to install additional system dependencies for Chromium
-# if the slim image doesn't have them.
-RUN patchright install chromium
+# Install the package itself (without deps, already installed)
+RUN pip install --no-cache-dir --no-deps -e .
 
 # Copy built frontend assets from Stage 1
 COPY --from=frontend-builder /app/web/dist /app/static
 
-# Create necessary directories
-RUN mkdir -p /app/downloads /app/data /app/logs
+# Create necessary directories and non-root user in single layer
+RUN mkdir -p /app/downloads /app/data /app/logs \
+    && useradd -m -u 1000 mrbanana \
+    && chown -R mrbanana:mrbanana /app
 
-# Create non-root user for security
-RUN useradd -m -u 1000 mrbanana && \
-    chown -R mrbanana:mrbanana /app
 USER mrbanana
 
 # Expose port
