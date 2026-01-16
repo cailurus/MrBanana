@@ -86,14 +86,24 @@ Common flags:
 
 When running in Docker, map your host directories into the container. The syntax is `host_path:container_path`.
 
-### Example: Single data directory
+### Persistent storage
 
-If you want all downloads and scraping to use one directory:
+The container uses two main directories:
+
+| Container path | Description | Recommended host path |
+|----------------|-------------|----------------------|
+| `/config` | Config file, database, logs (persisted) | `/volume/mrbanana/config` |
+| `/data` | Media files (videos, downloads) | `/volume/data` |
+
+**Important**: Mount `/config` to preserve your settings, subscription database, and logs across container updates.
+
+### Example: Recommended setup
 
 ```bash
 docker run -d \
   --name mr-banana \
   -p 8000:8000 \
+  -v /volume/mrbanana/config:/config \
   -v /volume/data:/data \
   -e ALLOWED_BROWSE_ROOTS="/data" \
   cailurus/mr-banana:latest
@@ -101,20 +111,21 @@ docker run -d \
 
 | Host path | Container path | Description |
 |-----------|----------------|-------------|
-| `/volume/data` | `/data` | Your data directory |
+| `/volume/mrbanana/config` | `/config` | Config, database, logs |
+| `/volume/data` | `/data` | Your media directory |
 
-After this setup:
-- Click directory input in web UI → remote directory browser opens
-- You'll see `/data` as the root directory
-- Select paths like `/data/input`, `/data/output`
-- These map to `/volume/data/input`, `/volume/data/output` on your host
+Contents saved in `/config`:
+- `config.json` - Application settings
+- `mr_banana_subscription.db` - Subscription database
+- `logs/` - Application logs
 
-### Example: Multiple directories
+### Example: Multiple data directories
 
 ```bash
 docker run -d \
   --name mr-banana \
   -p 8000:8000 \
+  -v /volume/mrbanana/config:/config \
   -v /volume/downloads:/downloads \
   -v /volume/media:/media \
   -e ALLOWED_BROWSE_ROOTS="/downloads,/media" \

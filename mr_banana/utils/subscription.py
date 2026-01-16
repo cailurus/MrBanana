@@ -10,8 +10,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import List, Dict, Optional, Generator
 
-# 数据库文件存放在项目根目录的 data/ 目录下
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
+# 数据库文件存放在配置目录下（Docker 中为 /config，本地开发为 data/）
+_CONFIG_DIR = os.environ.get("MR_BANANA_CONFIG_DIR", "")
+if _CONFIG_DIR:
+    DATA_DIR = _CONFIG_DIR
+else:
+    # Fallback to project data/ directory for local development
+    DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 SUBSCRIPTION_DB_FILE = os.path.join(DATA_DIR, "mr_banana_subscription.db")
 

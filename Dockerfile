@@ -23,7 +23,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     # Reduce patchright browser size
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    # Configuration directory for persistent data (config, db, logs)
+    MR_BANANA_CONFIG_DIR=/config
 
 WORKDIR /app
 
@@ -80,14 +82,19 @@ RUN pip install --no-cache-dir --no-deps -e .
 COPY --from=frontend-builder /app/web/dist /app/static
 
 # Create necessary directories and non-root user in single layer
-RUN mkdir -p /app/downloads /app/data /app/logs \
+# /config - for persistent config, database, and logs (should be mounted)
+# /data - for media files (should be mounted)
+RUN mkdir -p /config/logs /data \
     && useradd -m -u 1000 mrbanana \
-    && chown -R mrbanana:mrbanana /app
+    && chown -R mrbanana:mrbanana /app /config /data
 
 USER mrbanana
 
 # Expose port
 EXPOSE 8000
+
+# Volumes for persistent data
+VOLUME ["/config", "/data"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

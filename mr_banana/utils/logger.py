@@ -9,8 +9,13 @@ import threading
 
 _task_ctx = threading.local()
 
-# 日志文件存放在项目根目录的 logs/ 目录下
-LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs")
+# 日志文件存放在配置目录下（Docker 中为 /config，本地开发为 logs/）
+_CONFIG_DIR = os.environ.get("MR_BANANA_CONFIG_DIR", "")
+if _CONFIG_DIR:
+    LOGS_DIR = os.path.join(_CONFIG_DIR, "logs")
+else:
+    # Fallback to project logs/ directory for local development
+    LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
 DEFAULT_LOG_FILE = os.path.join(LOGS_DIR, "mr_banana.log")
 

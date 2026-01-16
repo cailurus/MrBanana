@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
+# Support custom config directory via environment variable
+# Default: /config in Docker, or project directory for local development
+_CONFIG_DIR = os.environ.get("MR_BANANA_CONFIG_DIR", "")
+if _CONFIG_DIR:
+    CONFIG_PATH = Path(_CONFIG_DIR) / "config.json"
+else:
+    # Fallback to project directory for local development
+    CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 
 
 @dataclass
