@@ -1,5 +1,29 @@
 # Mr. Banana
 
+<p align="center">
+  <img src="web/public/favicon.svg" alt="Mr. Banana Logo" width="120" height="120">
+</p>
+
+<p align="center">
+  <strong>🍌 Download from Jable.tv and scrape local videos with Web UI</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/cailurus/MrBanana/releases"><img src="https://img.shields.io/github/v/release/cailurus/MrBanana?style=flat-square&color=blue" alt="GitHub Release"></a>
+  <a href="https://github.com/cailurus/MrBanana/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cailurus/MrBanana?style=flat-square" alt="License"></a>
+  <a href="https://hub.docker.com/r/cailurus/mr-banana"><img src="https://img.shields.io/docker/pulls/cailurus/mr-banana?style=flat-square&logo=docker&logoColor=white" alt="Docker Pulls"></a>
+  <a href="https://hub.docker.com/r/cailurus/mr-banana"><img src="https://img.shields.io/docker/image-size/cailurus/mr-banana/latest?style=flat-square&logo=docker&logoColor=white&label=image%20size" alt="Docker Image Size"></a>
+  <a href="https://github.com/cailurus/MrBanana/stargazers"><img src="https://img.shields.io/github/stars/cailurus/MrBanana?style=flat-square&color=yellow" alt="GitHub Stars"></a>
+</p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/cailurus/MrBanana/main/userscripts/mrbanana-helper.user.js"><img src="https://img.shields.io/badge/Tampermonkey-Install%20Script-00485B?style=flat-square&logo=tampermonkey&logoColor=white" alt="Install Userscript"></a>
+  <a href="#docker"><img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Ready"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
+</p>
+
+---
+
 Download from Jable.tv and scrape local videos (generate NFO/artwork) with CLI or Web UI. Backend: FastAPI. Frontend: React/Vite.
 
 ## Features

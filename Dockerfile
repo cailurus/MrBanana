@@ -18,6 +18,14 @@ RUN npm run build && npm cache clean --force
 # Stage 2: Runtime
 FROM python:3.11-slim
 
+# OCI Labels for container registries and management tools
+LABEL org.opencontainers.image.title="Mr. Banana" \
+      org.opencontainers.image.description="Download from Jable.tv and scrape local videos with Web UI" \
+      org.opencontainers.image.url="https://github.com/cailurus/MrBanana" \
+      org.opencontainers.image.source="https://github.com/cailurus/MrBanana" \
+      org.opencontainers.image.vendor="cailurus" \
+      org.opencontainers.image.licenses="MIT"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
