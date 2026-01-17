@@ -244,7 +244,7 @@ function SearchResultPreview({ result, tr, onDownloadFromJable, downloading, out
                 </div>
 
                 {/* Right: Metadata */}
-                <div className="space-y-4">
+                <div className="space-y-4 min-w-0">
                     {/* Title & Code */}
                     <div>
                         <div className="text-xl font-bold">{result.code}</div>
@@ -332,13 +332,13 @@ function SearchResultPreview({ result, tr, onDownloadFromJable, downloading, out
                     )}
 
                     {/* Magnet Links */}
-                    <div>
+                    <div className="min-w-0">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                             <Magnet className="h-4 w-4" />
                             {tr('download.search.magnetLinks')}
                         </div>
                         {result.magnet_links && result.magnet_links.length > 0 ? (
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                            <div className="space-y-2 max-h-48 overflow-y-auto overflow-x-hidden">
                                 {result.magnet_links.map((magnet, idx) => (
                                     <MagnetLinkItem key={idx} magnet={magnet} tr={tr} />
                                 ))}

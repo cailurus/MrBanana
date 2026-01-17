@@ -18,6 +18,7 @@ import { ScrapeTab } from './components/tabs/scrape';
 import { stableStringify } from './utils/appHelpers';
 import { useDownloadStore } from './stores';
 import { useTheme, usePersistedString } from './hooks';
+import { useSnowfall } from './components/Snowfall';
 import faviconUrl from '/favicon.svg';
 
 // App build info
@@ -63,6 +64,11 @@ function App() {
     );
 
     const tr = useCallback((key, vars) => t(uiLang, key, vars), [uiLang]);
+
+    // =========================================================================
+    // Fun Features (Easter Eggs)
+    // =========================================================================
+    const { Snowfall, toggleSnow } = useSnowfall();
 
     // =========================================================================
     // Tab Management (using extracted hook)
@@ -988,10 +994,17 @@ function App() {
 
                 {/* Footer */}
                 <div className="text-center text-xs text-muted-foreground/60 pt-4 pb-2">
-                    © {new Date().getFullYear()} Mr. Banana. All Rights Reserved.
+                    <span
+                        onClick={toggleSnow}
+                        className="cursor-pointer hover:text-muted-foreground transition-colors"
+                        title="❄️"
+                    >©</span> {new Date().getFullYear()} Mr. Banana. All Rights Reserved.
                 </div>
 
             </div>
+
+            {/* Snowfall Effect (Easter Egg) */}
+            <Snowfall />
         </div>
     );
 }
