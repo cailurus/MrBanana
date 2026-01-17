@@ -67,10 +67,17 @@ def normalize_code(code: str) -> str:
 def check_jable_availability(code: str, proxy_url: str | None = None) -> tuple[bool, str | None]:
     """Check if a video is available on Jable.tv.
     
+    Also checks for -c suffix variants (e.g., ssni-369-c).
+    
     Returns:
         Tuple of (is_available, jable_url)
     """
-    jable_url = f"https://jable.tv/videos/{code.lower()}/"
+    # Try multiple URL variants: original and -c suffix
+    code_lower = code.lower()
+    url_variants = [
+        f"https://jable.tv/videos/{code_lower}/",
+        f"https://jable.tv/videos/{code_lower}-c/",
+    ]
     
     try:
         proxies = None
@@ -81,36 +88,37 @@ def check_jable_availability(code: str, proxy_url: str | None = None) -> tuple[b
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         }
         
-        # Use HEAD request first to check availability (faster)
-        response = requests.head(
-            jable_url,
-            headers=headers,
-            timeout=10,
-            verify=False,
-            allow_redirects=True,
-            impersonate="chrome",
-            proxies=proxies,
-        )
-        
-        # If HEAD returns 200, the video exists
-        if response.status_code == 200:
-            return True, jable_url
-        
-        # Some servers don't support HEAD, try GET
-        if response.status_code in (405, 403):
-            response = requests.get(
+        for jable_url in url_variants:
+            # Use HEAD request first to check availability (faster)
+            response = requests.head(
                 jable_url,
                 headers=headers,
                 timeout=10,
                 verify=False,
+                allow_redirects=True,
                 impersonate="chrome",
                 proxies=proxies,
             )
+            
+            # If HEAD returns 200, the video exists
             if response.status_code == 200:
-                # Check if it's not a 404 page or redirect to home
-                content = response.text[:2000] if response.text else ""
-                if "404" not in content and "找不到" not in content and "not found" not in content.lower():
-                    return True, jable_url
+                return True, jable_url
+            
+            # Some servers don't support HEAD, try GET
+            if response.status_code in (405, 403):
+                response = requests.get(
+                    jable_url,
+                    headers=headers,
+                    timeout=10,
+                    verify=False,
+                    impersonate="chrome",
+                    proxies=proxies,
+                )
+                if response.status_code == 200:
+                    # Check if it's not a 404 page or redirect to home
+                    content = response.text[:2000] if response.text else ""
+                    if "404" not in content and "找不到" not in content and "not found" not in content.lower():
+                        return True, jable_url
         
         return False, None
     except Exception:
