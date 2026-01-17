@@ -1,7 +1,7 @@
 # Mr. Banana
 
 <p align="center">
-  <img src="web/public/favicon.svg" alt="Mr. Banana Logo" width="120" height="120">
+  <img src="https://raw.githubusercontent.com/cailurus/MrBanana/main/web/public/favicon.svg" alt="Mr. Banana Logo" width="120" height="120">
 </p>
 
 <p align="center">
