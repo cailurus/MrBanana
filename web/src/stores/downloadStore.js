@@ -84,9 +84,12 @@ export const useDownloadStore = create((set, get) => ({
         }
     },
 
-    saveConfig: async () => {
-        const { config, configSaving } = get();
+    saveConfig: async (overrideConfig = null) => {
+        const { config: storeConfig, configSaving } = get();
         if (configSaving) return;
+
+        // 使用 override 或当前 store 的配置
+        const config = overrideConfig ? { ...storeConfig, ...overrideConfig } : storeConfig;
 
         set({ configSaving: true });
         try {

@@ -2,9 +2,9 @@
  * DownloadTab - Download management tab component
  * Uses downloadStore for state management
  */
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
-import { History, Download, Settings, ChevronDown, AlertCircle, Search, Copy, Check, ExternalLink, Magnet, Play, Clock, Users, Tag, Building, Film, Loader2, Plus, Bell } from 'lucide-react';
+import { History, Download, Settings, ChevronDown, AlertCircle, Search, Copy, Check, ExternalLink, Magnet, Play, Clock, Users, Tag, Building, Film, Loader2, Plus, Bell, Link2 } from 'lucide-react';
 import { t } from '../../i18n';
 import { Button, Card, Input, Select, cn } from '../ui';
 import { clamp, extractCodeFromUrl, formatDateTime } from '../../utils/format';
@@ -105,7 +105,7 @@ function MagnetLinkItem({ magnet, tr }) {
 
     return (
         <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-            <Magnet className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <Link2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate" title={magnet.name}>
                     {magnet.name}
@@ -376,7 +376,9 @@ export function DownloadTab({
         config, setConfig,
         configSaving, setConfigSaving,
         fetchHistory,
+        fetchConfig,
         clearHistory,
+        saveConfig,
         // Search state
         searchQuery, setSearchQuery,
         searchResult, setSearchResult,
@@ -387,6 +389,12 @@ export function DownloadTab({
 
     // Get scrape config for sync before download-then-scrape
     const scrapeConfig = useScrapeStore((s) => s.config);
+
+    // 初始化加载配置
+    useEffect(() => {
+        fetchConfig();
+        fetchHistory();
+    }, [fetchConfig, fetchHistory]);
 
     // Local UI state
     const [showSettings, setShowSettings] = useState(false);
@@ -432,6 +440,7 @@ export function DownloadTab({
         });
         if (picked) {
             setConfig({ outputDir: picked });
+            await saveConfig({ outputDir: picked });
         } else if (picked === null) {
             // Native dialog not available - show remote browser
             setShowDirBrowser(true);
@@ -439,8 +448,9 @@ export function DownloadTab({
         setDirPickerField(null);
     };
 
-    const handleDirBrowserSelect = (path) => {
+    const handleDirBrowserSelect = async (path) => {
         setConfig({ outputDir: path });
+        await saveConfig({ outputDir: path });
     };
 
     // Search handler

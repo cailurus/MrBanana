@@ -131,3 +131,25 @@ docker-logs:
 # Push image to remote registry (ensure IMAGE points to your registry/repo and you're logged in)
 docker-push:
 	docker push $(IMAGE):$(TAG)
+
+.PHONY: version
+# Update version number in both frontend and backend
+# Usage: make version V=0.2.5
+version:
+ifndef V
+	@echo "Usage: make version V=0.2.5"
+	@echo "Current version:"
+	@grep "APP_VERSION" web/src/i18n.js | head -1
+	@exit 1
+endif
+	@echo "Updating version to $(V)..."
+	@sed -i '' "s/APP_VERSION = '[^']*'/APP_VERSION = '$(V)'/" web/src/i18n.js
+	@sed -i '' 's/CURRENT_VERSION = "[^"]*"/CURRENT_VERSION = "$(V)"/' api/routes/version.py
+	@echo "Updated:"
+	@grep "APP_VERSION" web/src/i18n.js | head -1
+	@grep "CURRENT_VERSION" api/routes/version.py | head -1
+	@echo ""
+	@echo "Don't forget to:"
+	@echo "  1. git commit -m 'chore: bump version to $(V)'"
+	@echo "  2. git push origin main"
+	@echo "  3. Create GitHub Release with tag v$(V)"

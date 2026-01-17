@@ -6,8 +6,15 @@ import re
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 from typing import Callable
+from io import BytesIO
 
 from curl_cffi import requests
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 from ..types import MediaInfo, CrawlResult
 
@@ -190,6 +197,43 @@ def _download_image(
         return False
 
 
+def _crop_poster_from_fanart(
+    fanart_path: Path,
+    poster_path: Path,
+    *,
+    log_fn: Callable[[str], None] | None = None,
+) -> bool:
+    """从 fanart 裁剪右边 47.5% 作为 poster。
+    
+    Fanart 是影碟完整封面：左边背面(47.5%) + 中封(5%) + 右边正面(47.5%)
+    我们裁剪右边的正面图作为 poster。
+    """
+    if not HAS_PIL:
+        if log_fn:
+            log_fn("PIL not available, skip poster cropping from fanart")
+        return False
+    
+    try:
+        with Image.open(fanart_path) as img:
+            width, height = img.size
+            # 裁剪右边 47.5% (52.5% 位置开始)
+            crop_start_x = int(width * 0.525)
+            cropped = img.crop((crop_start_x, 0, width, height))
+            
+            # 保存为 JPEG，质量 95
+            if cropped.mode in ('RGBA', 'P'):
+                cropped = cropped.convert('RGB')
+            cropped.save(poster_path, 'JPEG', quality=95)
+            
+            if log_fn:
+                log_fn(f"poster cropped from fanart: {poster_path.name} ({cropped.size[0]}x{cropped.size[1]})")
+            return True
+    except Exception as e:
+        if log_fn:
+            log_fn(f"poster crop from fanart failed: {e}")
+        return False
+
+
 def write_nfo(video_path: Path, media: MediaInfo, meta: CrawlResult, options: NfoWriteOptions | None = None) -> Path | None:
     """Write a Kodi/Emby-friendly movie NFO next to the video file.
 
@@ -316,14 +360,6 @@ def write_nfo(video_path: Path, media: MediaInfo, meta: CrawlResult, options: Nf
             h["Referer"] = "https://javtrailers.com/"
         return h
 
-    if poster_url and opts.download_poster:
-        ext = _guess_image_ext(str(poster_url))
-        poster_path = video_path.with_name(f"{video_path.stem}-poster{ext}")
-        if emit:
-            emit(f"artwork try poster: {poster_url}")
-        if _download_image(str(poster_url), poster_path, proxy_url=opts.proxy_url, headers=_headers_for(str(poster_url)), log_fn=emit):
-            poster_name = poster_path.name
-
     if fanart_url and opts.download_fanart:
         ext = _guess_image_ext(str(fanart_url))
         fanart_path = video_path.with_name(f"{video_path.stem}-fanart{ext}")
@@ -331,6 +367,29 @@ def write_nfo(video_path: Path, media: MediaInfo, meta: CrawlResult, options: Nf
             emit(f"artwork try fanart: {fanart_url}")
         if _download_image(str(fanart_url), fanart_path, proxy_url=opts.proxy_url, headers=_headers_for(str(fanart_url)), log_fn=emit):
             fanart_name = fanart_path.name
+            
+            # 优先从 fanart 裁剪 poster（更清晰）
+            if opts.download_poster:
+                poster_path = video_path.with_name(f"{video_path.stem}-poster.jpg")
+                if _crop_poster_from_fanart(fanart_path, poster_path, log_fn=emit):
+                    poster_name = poster_path.name
+                    # 已从 fanart 裁剪，跳过下载 poster_url
+                elif poster_url:
+                    # 裁剪失败，回退到下载 poster_url
+                    ext = _guess_image_ext(str(poster_url))
+                    poster_path = video_path.with_name(f"{video_path.stem}-poster{ext}")
+                    if emit:
+                        emit(f"artwork try poster (fallback): {poster_url}")
+                    if _download_image(str(poster_url), poster_path, proxy_url=opts.proxy_url, headers=_headers_for(str(poster_url)), log_fn=emit):
+                        poster_name = poster_path.name
+    elif poster_url and opts.download_poster:
+        # 没有 fanart，直接下载 poster
+        ext = _guess_image_ext(str(poster_url))
+        poster_path = video_path.with_name(f"{video_path.stem}-poster{ext}")
+        if emit:
+            emit(f"artwork try poster: {poster_url}")
+        if _download_image(str(poster_url), poster_path, proxy_url=opts.proxy_url, headers=_headers_for(str(poster_url)), log_fn=emit):
+            poster_name = poster_path.name
 
     # Best-effort fallback: for some DMM titles, preview URLs follow a predictable pattern.
     # If we didn't scrape any preview_urls but we do have a DMM poster URL, try generating candidates.

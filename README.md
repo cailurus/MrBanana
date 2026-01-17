@@ -119,20 +119,25 @@ Contents saved in `/config`:
 - `mr_banana_subscription.db` - Subscription database
 - `logs/` - Application logs
 
-### Example: Multiple data directories
-
-```bash
-docker run -d \
-  --name mr-banana \
-  -p 8000:8000 \
-  -v /volume/mrbanana/config:/config \
-  -v /volume/downloads:/downloads \
-  -v /volume/media:/media \
-  -e ALLOWED_BROWSE_ROOTS="/downloads,/media" \
-  cailurus/mr-banana:latest
-```
-
 The `ALLOWED_BROWSE_ROOTS` environment variable controls which directories users can browse via the web UI when accessing remotely.
+
+## Browser Userscript
+
+Install the userscript to add quick buttons on JavDB and Jable websites:
+
+### Installation
+
+1. Install [Tampermonkey](https://www.tampermonkey.net/) (Chrome/Firefox/Edge/Safari)
+2. **Important**: Enable user scripts in Tampermonkey settings:
+   - Click Tampermonkey icon → Dashboard → Settings tab
+   - Find "Security" section → Enable "Allow User Scripts"
+3. Click to install: [mrbanana-helper.user.js](https://raw.githubusercontent.com/cailurus/MrBanana/main/userscripts/mrbanana-helper.user.js)
+4. Configure your Mr. Banana server address (click Tampermonkey icon → ⚙️ Mr. Banana 设置)
+
+### Features
+
+- **JavDB**: Adds "Subscribe to Mr. Banana" button on video detail pages
+- **Jable**: Adds "Download to Mr. Banana" button on video pages
 
 ## License
 

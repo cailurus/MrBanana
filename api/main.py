@@ -13,6 +13,7 @@ from api.routes.scrape import router as scrape_router
 from api.routes.search import router as search_router
 from api.routes.subscription import router as subscription_router
 from api.routes.system import router as system_router
+from api.routes.version import router as version_router
 from api.routes.ws import router as ws_router
 from api.constants import API_VERSION
 from api.scheduler import start_scheduler, stop_scheduler
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(search_router, tags=["search"])
     app.include_router(subscription_router, tags=["subscription"])
     app.include_router(system_router, tags=["system"])
+    app.include_router(version_router, tags=["version"])
     app.include_router(ws_router, tags=["websocket"])
 
     # --- Static Files (Frontend) ---
