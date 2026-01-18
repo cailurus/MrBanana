@@ -212,10 +212,12 @@ export const useScrapeStore = create((set, get) => ({
             const cfg = res.data || {};
             if (cfg && typeof cfg === 'object') {
                 const next = cleanConfigPayload(cfg);
+                const merged = { ...get().config, ...next };
                 set({
-                    config: { ...get().config, ...next },
+                    config: merged,
                     autoSaveReady: true,
                     autoSaveSkipOnce: true,
+                    lastSavedPayload: stableStringify(cleanConfigPayload(merged)),
                 });
             }
         } catch (err) {

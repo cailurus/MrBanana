@@ -7,7 +7,7 @@ import httpx
 router = APIRouter()
 
 # 当前版本（与前端 i18n.js 中的 APP_VERSION 保持一致）
-CURRENT_VERSION = "0.2.4"
+CURRENT_VERSION = "0.2.5"
 
 # GitHub 仓库信息
 GITHUB_REPO = "cailurus/MrBanana"

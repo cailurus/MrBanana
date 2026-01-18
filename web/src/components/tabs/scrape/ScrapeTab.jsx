@@ -230,7 +230,7 @@ export function ScrapeTab({
 
         const t = window.setTimeout(async () => {
             if (configSaving) return;
-            setLastSavedPayload(serialized);
+            // Don't set lastSavedPayload here - let saveConfig handle it
             try {
                 await saveConfig();
             } catch (err) {
