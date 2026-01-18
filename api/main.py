@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from api.routes.download import router as download_router
 from api.routes.library import router as library_router
 from api.routes.player import router as player_router
+from api.routes.player_open import router as player_open_router
 from api.routes.scrape import router as scrape_router
 from api.routes.search import router as search_router
 from api.routes.subscription import router as subscription_router
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(download_router, tags=["download"])
     app.include_router(library_router, tags=["library"])
     app.include_router(player_router, tags=["player"])
+    app.include_router(player_open_router, tags=["player"])
     app.include_router(scrape_router, tags=["scrape"])
     app.include_router(search_router, tags=["search"])
     app.include_router(subscription_router, tags=["subscription"])

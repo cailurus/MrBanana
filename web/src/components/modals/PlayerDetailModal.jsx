@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Button, Card, cn } from '../ui';
 import { proxyImageUrl } from '../../utils/appHelpers';
+import axios from 'axios';
 
 /**
  * Player detail modal component
@@ -27,6 +28,21 @@ export function PlayerDetailModal({
     const canPlay = Boolean(it?.video_rel);
     const videoSrc = canPlay ? `/api/library/video?rel=${encodeURIComponent(String(it.video_rel))}` : '';
     const previewUrls = Array.isArray(it?.preview_urls) ? it.preview_urls : [];
+
+    // Check if browser can play this format
+    const videoRel = it?.video_rel || '';
+    const ext = videoRel.split('.').pop()?.toLowerCase() || '';
+    const browserSupportedFormats = ['mp4', 'webm', 'm4v', 'mov'];
+    const canPlayInBrowser = browserSupportedFormats.includes(ext);
+
+    const handleOpenSystemPlayer = async () => {
+        if (!canPlay || !it?.video_abs) return;
+        try {
+            await axios.post('/api/player/open', { file_path: it.video_abs });
+        } catch (err) {
+            alert('无法唤起系统播放器: ' + (err?.response?.data?.detail || err.message));
+        }
+    };
 
     return createPortal(
         <div
@@ -72,11 +88,25 @@ export function PlayerDetailModal({
                                             <div className="mt-3 flex items-center gap-3">
                                                 <Button
                                                     type="button"
-                                                    disabled={!canPlay}
+                                                    disabled={!canPlay || !canPlayInBrowser}
                                                     onClick={onPlay}
+                                                    title={!canPlayInBrowser ? `浏览器不支持 .${ext} 格式，请使用系统播放器` : ''}
                                                 >
                                                     {tr('player.play')}
                                                 </Button>
+                                                <Button
+                                                    type="button"
+                                                    disabled={!canPlay || !it?.video_abs}
+                                                    onClick={handleOpenSystemPlayer}
+                                                    variant="outline"
+                                                >
+                                                    用系统播放器打开
+                                                </Button>
+                                                {!canPlayInBrowser && canPlay && (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        浏览器不支持 .{ext} 格式
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -99,7 +129,13 @@ export function PlayerDetailModal({
                         {/* Video player */}
                         {playing && videoSrc ? (
                             <div className="overflow-hidden rounded-xl border bg-background">
-                                <video src={videoSrc} controls autoPlay className="w-full" />
+                                <video 
+                                    src={videoSrc} 
+                                    controls 
+                                    autoPlay 
+                                    className="w-full"
+                                    onError={(e) => console.error('Video error:', e.target.error)}
+                                />
                             </div>
                         ) : null}
 

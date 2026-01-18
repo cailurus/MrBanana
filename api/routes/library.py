@@ -177,9 +177,11 @@ async def list_library_items(limit: int = 200):
             except Exception:
                 video_rel = None
 
+        video_abs = str(video_path) if video_path else None
         items.append(
             {
                 "video_rel": video_rel,
+                "video_abs": video_abs,
                 "title": meta.get("title") or (video_path.stem if video_path else nfo.stem),
                 "code": meta.get("code") or nfo.stem,
                 "url": meta.get("url"),
@@ -292,7 +294,9 @@ async def stream_library_video(rel: str, request: Request):
         units, rng = range_header.split("=", 1)
         if units.strip().lower() != "bytes":
             raise ValueError("invalid units")
-        start_s, end_s = (rng.split("-", 1) + [""])
+        parts = rng.split("-", 1)
+        start_s = parts[0] if len(parts) > 0 else ""
+        end_s = parts[1] if len(parts) > 1 else ""
         start = int(start_s) if start_s.strip() else 0
         end = int(end_s) if end_s.strip() else size - 1
         if start < 0 or end < 0 or start > end or start >= size:
