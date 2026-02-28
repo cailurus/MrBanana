@@ -129,10 +129,10 @@ export function PlayerDetailModal({
                         {/* Video player */}
                         {playing && videoSrc ? (
                             <div className="overflow-hidden rounded-xl border bg-background">
-                                <video 
-                                    src={videoSrc} 
-                                    controls 
-                                    autoPlay 
+                                <video
+                                    src={videoSrc}
+                                    controls
+                                    autoPlay
                                     className="w-full"
                                     onError={(e) => console.error('Video error:', e.target.error)}
                                 />

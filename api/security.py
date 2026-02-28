@@ -1,9 +1,15 @@
 """
-Security utilities for path validation
+Security utilities for path validation and media root management
 """
+from __future__ import annotations
+
 import os
 from pathlib import Path
+from typing import List
+
 from fastapi import HTTPException
+
+from mr_banana.utils.config import load_config
 
 
 def is_safe_path(base_path: str | Path, target_path: str | Path) -> bool:
@@ -140,3 +146,50 @@ def validate_directory_exists(path: str | Path) -> Path:
             status_code=400,
             detail=f"Invalid directory path: {e}"
         )
+
+
+# --- Media root helpers (shared by library.py, player_open.py, etc.) ---
+
+_MEDIA_ROOT_ATTRS = ("scrape_output_dir", "scrape_dir", "player_root_dir", "output_dir")
+
+
+def get_all_media_roots() -> List[Path]:
+    """Get all configured media root directories that exist on disk."""
+    cfg = load_config()
+    roots: List[Path] = []
+    for attr in _MEDIA_ROOT_ATTRS:
+        dir_str = str(getattr(cfg, attr, "") or "").strip()
+        if not dir_str:
+            continue
+        root = Path(os.path.expanduser(dir_str))
+        if root.exists() and root.is_dir() and root not in roots:
+            roots.append(root)
+    return roots
+
+
+def get_library_root() -> Path | None:
+    """Get the primary library root (player_root_dir > scrape_output_dir)."""
+    cfg = load_config()
+    root_dir = (
+        str(getattr(cfg, "player_root_dir", "") or "").strip()
+        or str(getattr(cfg, "scrape_output_dir", "") or "").strip()
+    )
+    if not root_dir:
+        return None
+    root = Path(os.path.expanduser(root_dir))
+    if not root.exists() or not root.is_dir():
+        return None
+    return root
+
+
+def is_path_under_roots(file_path: str | Path, roots: List[Path]) -> bool:
+    """Check if file_path is under any of the given root directories."""
+    try:
+        resolved = Path(file_path).resolve()
+        for root in roots:
+            root_resolved = root.resolve()
+            if resolved == root_resolved or root_resolved in resolved.parents:
+                return True
+        return False
+    except Exception:
+        return False

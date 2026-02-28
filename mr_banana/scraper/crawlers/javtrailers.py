@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from curl_cffi import requests
 
+from mr_banana.utils.network import DEFAULT_USER_AGENT
 from ..types import CrawlResult, MediaInfo
-from .base import BaseCrawler, extract_jav_code
+from .base import BaseCrawler
 
 
 @dataclass
@@ -33,28 +33,17 @@ class JavtrailersCrawler(BaseCrawler):
     name = "javtrailers"
 
     def __init__(self, cfg: JavtrailersConfig | None = None, log_fn=None):
-        self.cfg = cfg or JavtrailersConfig()
-        self._log = log_fn
-
-    def _emit(self, msg: str) -> None:
-        if self._log:
-            try:
-                self._log(msg)
-            except Exception:
-                pass
+        super().__init__(cfg=cfg or JavtrailersConfig(), log_fn=log_fn)
 
     def _headers(self) -> dict[str, str]:
         h = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
             "Accept": "application/json,text/plain,*/*",
         }
         token = str(getattr(self.cfg, "auth_token", "") or "").strip()
         if token:
             h["Authorization"] = token
         return h
-
-    def _extract_code(self, file_path: Path) -> str | None:
-        return extract_jav_code(file_path)
 
     def _to_content_id(self, code: str) -> str | None:
         # Example: WAAA-585 -> waaa00585
@@ -111,7 +100,7 @@ class JavtrailersCrawler(BaseCrawler):
             return poster, fanart
         return None, None
 
-    def _fetch_video_api(self, content_id: str, proxies: dict | None) -> dict | None:
+    def _fetch_video_api(self, content_id: str) -> dict | None:
         """Fetch video data from javtrailers API. Returns parsed JSON or None."""
         api_url = f"{self.cfg.base_url}/api/video/{content_id}"
         self._emit(f"GET {api_url}")
@@ -122,7 +111,7 @@ class JavtrailersCrawler(BaseCrawler):
                 timeout=25,
                 verify=False,
                 impersonate="chrome",
-                proxies=proxies,
+                proxies=self._build_proxies(),
             )
         except Exception as e:
             self._emit(f"!! request error {api_url}: {e}")
@@ -154,22 +143,15 @@ class JavtrailersCrawler(BaseCrawler):
         if not content_id:
             return None
 
-        if self.cfg.request_delay_sec and self.cfg.request_delay_sec > 0:
-            time.sleep(float(self.cfg.request_delay_sec))
-
-        proxies = None
-        if getattr(self.cfg, "proxy_url", ""):
-            pu = str(self.cfg.proxy_url).strip()
-            if pu:
-                proxies = {"http": pu, "https": pu}
+        self._apply_delay()
 
         # Try without prefix first, then with "1" prefix (DMM convention for some videos)
-        payload = self._fetch_video_api(content_id, proxies)
+        payload = self._fetch_video_api(content_id)
         used_content_id = content_id
         if payload is None:
             # Try with "1" prefix - common for DMM digital exclusive content
             alt_content_id = f"1{content_id}"
-            payload = self._fetch_video_api(alt_content_id, proxies)
+            payload = self._fetch_video_api(alt_content_id)
             if payload is not None:
                 used_content_id = alt_content_id
 

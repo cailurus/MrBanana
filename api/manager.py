@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ from typing import Any
 from fastapi import WebSocket
 
 from mr_banana.downloader import MovieDownloader, normalize_jable_input
+from mr_banana.utils.network import build_proxies
 from mr_banana.utils.history import HistoryManager
 from mr_banana.utils.hls import DownloadCancelled
 from mr_banana.utils.config import load_config
@@ -22,16 +24,23 @@ class DownloadManager:
 
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
+        self._connections_lock = threading.Lock()
         self.active_tasks: dict[str, dict[str, Any]] = {}
+        self._tasks_lock = threading.Lock()
         self._cancel_events: dict[str, threading.Event] = {}
         self._log_handlers: dict[str, logging.Handler] = {}
         self._logs_dir = os.path.join(LOGS_DIR, "task_logs")
         os.makedirs(self._logs_dir, exist_ok=True)
         self.history_manager = HistoryManager()
-        # 应用重启后，之前处于“准备中/下载中”等未完成任务应标记为 Paused
+        # 应用重启后，之前处于"准备中/下载中"等未完成任务应标记为 Paused
         self.history_manager.mark_incomplete_as_paused()
         self._downloader: MovieDownloader | None = None
         self._downloader_key: tuple[int, str] | None = None
+
+    def get_active_tasks_snapshot(self) -> dict[str, dict[str, Any]]:
+        """Return a thread-safe deep copy of active_tasks."""
+        with self._tasks_lock:
+            return copy.deepcopy(self.active_tasks)
 
     def _get_downloader(
         self, *, max_workers: int, proxies: dict[str, str] | None
@@ -64,24 +73,29 @@ class DownloadManager:
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
-        self.active_connections.append(websocket)
+        with self._connections_lock:
+            self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket) -> None:
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+        with self._connections_lock:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         """广播消息给所有连接的客户端"""
-        if not self.active_connections:
+        with self._connections_lock:
+            connections = list(self.active_connections)
+        if not connections:
             return
-        
-        # 移除已关闭的连接
-        for connection in self.active_connections[:]:
+
+        for connection in connections:
             try:
                 await connection.send_json(message)
             except Exception:
-                if connection in self.active_connections:
-                    self.active_connections.remove(connection)
+                logger.debug("WebSocket connection closed, removing from active list")
+                with self._connections_lock:
+                    if connection in self.active_connections:
+                        self.active_connections.remove(connection)
 
     def start_download(
         self,
@@ -93,8 +107,9 @@ class DownloadManager:
         """启动下载任务（在独立线程中）"""
         normalized_url, _ = normalize_jable_input(url)
         # active_tasks 的 key 是 task_id，这里按 URL 检查是否已有活动任务
-        if any(t.get("url") == normalized_url and t.get("status") not in ("Completed", "Failed") for t in self.active_tasks.values()):
-            return {"status": "error", "message": "Task already exists"}
+        with self._tasks_lock:
+            if any(t.get("url") == normalized_url and t.get("status") not in ("Completed", "Failed") for t in self.active_tasks.values()):
+                return {"status": "error", "message": "Task already exists"}
 
         # 创建任务记录
         task_id = self.history_manager.add_task(normalized_url, status="Preparing", scrape_after_download=bool(scrape_after_download))
@@ -113,9 +128,10 @@ class DownloadManager:
             "scrape_job_id": None,
             "scrape_status": "Pending" if scrape_after_download else None,
         }
-        self.active_tasks[str(task_id)] = task_info
-        self._cancel_events[str(task_id)] = threading.Event()
-        
+        with self._tasks_lock:
+            self.active_tasks[str(task_id)] = task_info
+            self._cancel_events[str(task_id)] = threading.Event()
+
         # 启动线程
         thread = threading.Thread(
             target=self._download_worker,
@@ -129,8 +145,9 @@ class DownloadManager:
     def resume_download(self, task_id: int, output_dir: str) -> dict[str, Any]:
         """恢复一个已存在的任务（复用同一条 history 记录）"""
         task_id_str = str(task_id)
-        if task_id_str in self.active_tasks:
-            return {"status": "error", "message": "Task already active"}
+        with self._tasks_lock:
+            if task_id_str in self.active_tasks:
+                return {"status": "error", "message": "Task already active"}
 
         task = self.history_manager.get_task(task_id)
         if not task:
@@ -153,20 +170,19 @@ class DownloadManager:
         self._ensure_task_log_handler(task_id)
 
         # 注册内存任务
-        self.active_tasks[task_id_str] = {
-            "id": task_id,
-            "url": url,
-            "status": "Preparing",
-            "progress": 0,
-            "speed": "0 B/s",
-            "total_bytes": 0,
-            "scrape_after_download": scrape_after_download,
-            "scrape_job_id": scrape_job_id,
-            "scrape_status": scrape_status,
-        }
-
-        # 新的一次下载生命周期使用新的 cancel event
-        self._cancel_events[task_id_str] = threading.Event()
+        with self._tasks_lock:
+            self.active_tasks[task_id_str] = {
+                "id": task_id,
+                "url": url,
+                "status": "Preparing",
+                "progress": 0,
+                "speed": "0 B/s",
+                "total_bytes": 0,
+                "scrape_after_download": scrape_after_download,
+                "scrape_job_id": scrape_job_id,
+                "scrape_status": scrape_status,
+            }
+            self._cancel_events[task_id_str] = threading.Event()
 
         thread = threading.Thread(
             target=self._download_worker,
@@ -180,12 +196,27 @@ class DownloadManager:
     def _watch_scrape_job(self, download_task_id: int, scrape_job_id: int) -> None:
         """Track a scrape job status and reflect it onto the download record."""
         try:
-            from api.scrape_manager import scrape_manager
+            from api.dependencies import get_scrape_manager
+            scrape_manager = get_scrape_manager()
         except Exception:
+            logger.warning("Failed to import scrape_manager; cannot watch scrape job %s", scrape_job_id)
             return
 
         task_id_str = str(download_task_id)
+        max_wait_seconds = 86400  # 24 hours
+        started = time.time()
+
         while True:
+            if time.time() - started > max_wait_seconds:
+                logger.warning(
+                    f"Scrape job {scrape_job_id} for task {download_task_id} "
+                    f"timed out after {max_wait_seconds}s"
+                )
+                self.history_manager.update_scrape(download_task_id, scrape_status="Failed")
+                if task_id_str in self.active_tasks:
+                    self.active_tasks[task_id_str]["scrape_status"] = "Failed"
+                return
+
             try:
                 job = scrape_manager.get_job(scrape_job_id)
                 if not job:
@@ -242,8 +273,8 @@ class DownloadManager:
         event = self._cancel_events.get(task_id_str)
         if event:
             event.set()
-        if task_id_str in self.active_tasks:
-            del self.active_tasks[task_id_str]
+        with self._tasks_lock:
+            self.active_tasks.pop(task_id_str, None)
 
         self.history_manager.delete_task(task_id)
 
@@ -302,8 +333,10 @@ class DownloadManager:
         errors = 0
 
         try:
-            active_ids = set(str(k) for k in (self.active_tasks or {}).keys())
+            with self._tasks_lock:
+                active_ids = set(str(k) for k in (self.active_tasks or {}).keys())
         except Exception:
+            logger.warning("cleanup_logs: failed to read active task IDs, defaulting to empty set", exc_info=True)
             active_ids = set()
 
         try:
@@ -363,12 +396,14 @@ class DownloadManager:
 
         # Refuse while any active task is still running/preparing.
         try:
-            for t in (self.active_tasks or {}).values():
-                s = str((t or {}).get("status") or "")
-                if s in {"Preparing", "Downloading"}:
-                    return {"status": "error", "message": "cannot clear history while downloads are running"}
+            with self._tasks_lock:
+                for t in (self.active_tasks or {}).values():
+                    s = str((t or {}).get("status") or "")
+                    if s in {"Preparing", "Downloading"}:
+                        return {"status": "error", "message": "cannot clear history while downloads are running"}
         except Exception:
             # If we cannot reliably check, be safe.
+            logger.warning("clear_history: failed to check active tasks, refusing to proceed", exc_info=True)
             return {"status": "error", "message": "cannot clear history right now"}
 
         deleted_db_rows = 0
@@ -378,6 +413,7 @@ class DownloadManager:
         try:
             deleted_db_rows = int(self.history_manager.clear_all() or 0)
         except Exception:
+            logger.warning("clear_history: failed to clear database rows", exc_info=True)
             errors += 1
 
         # Detach/close all known handlers first.
@@ -390,6 +426,7 @@ class DownloadManager:
                     pass
                 self._log_handlers.pop(task_id_str, None)
         except Exception:
+            logger.warning("clear_history: failed to detach/close log handlers", exc_info=True)
             errors += 1
 
         # Delete log files on disk.
@@ -403,15 +440,19 @@ class DownloadManager:
                         os.remove(path)
                         deleted_logs += 1
                 except Exception:
+                    logger.warning("clear_history: failed to delete log file %s", name, exc_info=True)
                     errors += 1
         except Exception:
+            logger.warning("clear_history: failed to list/delete log files", exc_info=True)
             errors += 1
 
         # Clear any lingering paused/completed tasks in memory (best-effort).
         try:
-            self.active_tasks = {}
+            with self._tasks_lock:
+                self.active_tasks = {}
             self._cancel_events = {}
         except Exception:
+            logger.debug("clear_history: failed to clear in-memory task state", exc_info=True)
             pass
 
         return {
@@ -465,16 +506,13 @@ class DownloadManager:
             self.history_manager.update_task(task_id, status="Downloading")
 
             cfg = load_config()
-            max_workers = int(getattr(cfg, "max_download_workers", 16) or 16)
-            max_workers = max(1, min(max_workers, 128))
-            filename_format = str(getattr(cfg, "filename_format", "{id}") or "{id}")
-            preferred_resolution = str(getattr(cfg, "download_resolution", "best") or "best")
+            max_workers = max(1, min(int(cfg.max_download_workers or 16), 128))
+            filename_format = cfg.filename_format or "{id}"
+            preferred_resolution = cfg.download_resolution or "best"
 
-            use_proxy = bool(getattr(cfg, "download_use_proxy", False))
-            proxy_url = str(getattr(cfg, "download_proxy_url", "") or "").strip()
-            proxies = None
-            if use_proxy and proxy_url:
-                proxies = {"http": proxy_url, "https": proxy_url}
+            use_proxy = bool(cfg.download_use_proxy)
+            proxy_url = (cfg.download_proxy_url or "").strip()
+            proxies = build_proxies(proxy_url) if use_proxy else None
             
             output_path = self._get_downloader(max_workers=max_workers, proxies=proxies).download(
                 url=url,
@@ -510,7 +548,8 @@ class DownloadManager:
             # Trigger a scrape job after download completes.
             if scrape_after_download:
                 try:
-                    from api.scrape_manager import scrape_manager
+                    from api.dependencies import get_scrape_manager
+                    scrape_manager = get_scrape_manager()
 
                     dir_to_scrape = str(output_dir)
                     if stable_output_path:
@@ -580,5 +619,3 @@ class DownloadManager:
         # time.sleep(60)
         # if task_id_str in self.active_tasks:
         #    del self.active_tasks[task_id_str]
-
-manager = DownloadManager()

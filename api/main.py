@@ -17,17 +17,18 @@ from api.routes.system import router as system_router
 from api.routes.version import router as version_router
 from api.routes.ws import router as ws_router
 from api.constants import API_VERSION
-from api.scheduler import start_scheduler, stop_scheduler
+from api.dependencies import get_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # Startup
-    start_scheduler()
+    scheduler = get_scheduler()
+    scheduler.start()
     yield
     # Shutdown
-    stop_scheduler()
+    scheduler.stop()
 
 
 def create_app() -> FastAPI:

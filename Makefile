@@ -113,13 +113,13 @@ docker-stop:
 .PHONY: docker-run
 # Run container:
 # - Port mapping: $(DOCKER_PORT) -> container port 8000
-# - Mounts: downloads directory and history DB for persistence
+# - Mounts: /config for persistent config/DB/logs, /data for media files
 docker-run: docker-stop
 	docker run -d \
 		--name $(CONTAINER_NAME) \
 		-p $(DOCKER_PORT):8000 \
-		-v $(PWD)/downloads:/app/downloads \
-			-v $(PWD)/mr_banana_history.db:/app/mr_banana_history.db \
+		-v $(PWD)/config:/config \
+		-v $(PWD)/data:/data \
 		$(IMAGE):$(TAG)
 
 .PHONY: docker-logs
@@ -133,7 +133,7 @@ docker-push:
 	docker push $(IMAGE):$(TAG)
 
 .PHONY: version
-# Update version number in both frontend and backend
+# Update version number in frontend, backend, and pyproject.toml
 # Usage: make version V=0.2.5
 version:
 ifndef V
@@ -145,9 +145,11 @@ endif
 	@echo "Updating version to $(V)..."
 	@sed -i '' "s/APP_VERSION = '[^']*'/APP_VERSION = '$(V)'/" web/src/i18n.js
 	@sed -i '' 's/CURRENT_VERSION = "[^"]*"/CURRENT_VERSION = "$(V)"/' api/routes/version.py
+	@sed -i '' 's/^version = "[^"]*"/version = "$(V)"/' pyproject.toml
 	@echo "Updated:"
 	@grep "APP_VERSION" web/src/i18n.js | head -1
 	@grep "CURRENT_VERSION" api/routes/version.py | head -1
+	@grep 'version =' pyproject.toml | head -1
 	@echo ""
 	@echo "Don't forget to:"
 	@echo "  1. git commit -m 'chore: bump version to $(V)'"

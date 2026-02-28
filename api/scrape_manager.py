@@ -154,7 +154,8 @@ class ScrapeManager:
                     self._next_id = int(next_id)
                 else:
                     self._next_id = max_seen + 1
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to restore scrape jobs from disk: {e}")
             return
 
     def _persist_jobs_to_disk_locked(self) -> None:
@@ -168,7 +169,8 @@ class ScrapeManager:
             tmp = self._jobs_path + ".tmp"
             Path(tmp).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             os.replace(tmp, self._jobs_path)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to persist scrape jobs to disk: {e}")
             return
 
     def _has_running_job(self) -> bool:
@@ -200,7 +202,7 @@ class ScrapeManager:
         while True:
             try:
                 cfg = load_config()
-                mode = str(getattr(cfg, "scrape_trigger_mode", "manual") or "manual")
+                mode = cfg.scrape_trigger_mode
                 if mode not in {"manual", "interval", "watch"}:
                     mode = "manual"
 
@@ -209,7 +211,7 @@ class ScrapeManager:
                     time.sleep(1.0)
                     continue
 
-                scrape_dir = str(getattr(cfg, "scrape_dir", "") or "").strip()
+                scrape_dir = (cfg.scrape_dir or "").strip()
                 if not scrape_dir or not os.path.isdir(scrape_dir):
                     time.sleep(2.0)
                     continue
@@ -217,8 +219,7 @@ class ScrapeManager:
                 now = time.time()
 
                 if mode == "interval":
-                    interval_sec = int(getattr(cfg, "scrape_trigger_interval_sec", 3600) or 3600)
-                    interval_sec = max(30, interval_sec)
+                    interval_sec = max(30, int(cfg.scrape_trigger_interval_sec or 3600))
                     if now - float(self._auto_last_trigger_at or 0.0) >= float(interval_sec):
                         res = self.start_job(scrape_dir)
                         if res.get("status") == "success":
@@ -227,11 +228,9 @@ class ScrapeManager:
                     continue
 
                 if mode == "watch":
-                    poll_sec = float(getattr(cfg, "scrape_trigger_watch_poll_sec", 10.0) or 10.0)
-                    poll_sec = max(2.0, min(poll_sec, 120.0))
-                    min_age_sec = float(getattr(cfg, "scrape_trigger_watch_min_age_sec", 300.0) or 300.0)
-                    quiet_sec = float(getattr(cfg, "scrape_trigger_watch_quiet_sec", 30.0) or 30.0)
-                    quiet_sec = max(5.0, min(quiet_sec, 600.0))
+                    poll_sec = max(2.0, min(float(cfg.scrape_trigger_watch_poll_sec or 10.0), 120.0))
+                    min_age_sec = float(cfg.scrape_trigger_watch_min_age_sec or 300.0)
+                    quiet_sec = max(5.0, min(float(cfg.scrape_trigger_watch_quiet_sec or 30.0), 600.0))
 
                     fp = self._fingerprint_directory(scrape_dir, min_age_sec=min_age_sec)
                     if self._auto_last_fingerprint is None:
@@ -259,72 +258,63 @@ class ScrapeManager:
 
                 # manual
                 time.sleep(2.0)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Auto-trigger loop error: {e}")
                 time.sleep(2.0)
 
     def get_config(self) -> dict:
         cfg = load_config()
         return {
             "scrape_dir": cfg.scrape_dir,
-            "scrape_use_proxy": bool(getattr(cfg, "scrape_use_proxy", False)),
-            "scrape_proxy_url": str(getattr(cfg, "scrape_proxy_url", "") or ""),
-            "scrape_output_dir": getattr(cfg, "scrape_output_dir", "") or "",
-            "scrape_structure": getattr(cfg, "scrape_structure", "{actor}/{year}/{code}") or "{actor}/{year}/{code}",
-            "scrape_rename": bool(getattr(cfg, "scrape_rename", True)),
-            "scrape_copy_source": bool(getattr(cfg, "scrape_copy_source", True)),
-            "scrape_existing_action": str(getattr(cfg, "scrape_existing_action", "skip") or "skip"),
-            "scrape_threads": int(getattr(cfg, "scrape_threads", 1) or 1),
-            "scrape_thread_delay_sec": float(getattr(cfg, "scrape_thread_delay_sec", 0.0) or 0.0),
-            "scrape_javdb_delay_sec": float(getattr(cfg, "scrape_javdb_delay_sec", 0.0) or 0.0),
-            "scrape_javbus_delay_sec": float(getattr(cfg, "scrape_javbus_delay_sec", 0.0) or 0.0),
-            "scrape_sources": list(getattr(cfg, "scrape_sources", ["javdb", "javbus"]) or ["javdb", "javbus"]),
-
-            # Fallback sources
-            "scrape_sources_fallback": list(getattr(cfg, "scrape_sources_fallback", ["javbus", "dmm", "javdb"]) or ["javbus", "dmm", "javdb"]),
-
-            # Per-field sources
-            "scrape_sources_title": list(getattr(cfg, "scrape_sources_title", []) or []),
-            "scrape_sources_plot": list(getattr(cfg, "scrape_sources_plot", []) or []),
-            "scrape_sources_actors": list(getattr(cfg, "scrape_sources_actors", []) or []),
-            "scrape_sources_tags": list(getattr(cfg, "scrape_sources_tags", []) or []),
-            "scrape_sources_release": list(getattr(cfg, "scrape_sources_release", []) or []),
-            "scrape_sources_runtime": list(getattr(cfg, "scrape_sources_runtime", []) or []),
-            "scrape_sources_directors": list(getattr(cfg, "scrape_sources_directors", []) or []),
-            "scrape_sources_series": list(getattr(cfg, "scrape_sources_series", []) or []),
-            "scrape_sources_studio": list(getattr(cfg, "scrape_sources_studio", []) or []),
-            "scrape_sources_publisher": list(getattr(cfg, "scrape_sources_publisher", []) or []),
-            "scrape_sources_trailer": list(getattr(cfg, "scrape_sources_trailer", []) or []),
-            "scrape_sources_rating": list(getattr(cfg, "scrape_sources_rating", []) or []),
-            "scrape_sources_poster": list(getattr(cfg, "scrape_sources_poster", []) or []),
-            "scrape_sources_fanart": list(getattr(cfg, "scrape_sources_fanart", []) or []),
-            "scrape_sources_previews": list(getattr(cfg, "scrape_sources_previews", []) or []),
-            "scrape_write_nfo": bool(getattr(cfg, "scrape_write_nfo", True)),
-            "scrape_download_poster": bool(getattr(cfg, "scrape_download_poster", True)),
-            "scrape_download_fanart": bool(getattr(cfg, "scrape_download_fanart", True)),
-            "scrape_download_previews": bool(getattr(cfg, "scrape_download_previews", False)),
-            "scrape_download_trailer": bool(getattr(cfg, "scrape_download_trailer", False)),
-            "scrape_download_subtitle": bool(getattr(cfg, "scrape_download_subtitle", False)),
-            "scrape_subtitle_languages": list(getattr(cfg, "scrape_subtitle_languages", []) or []),
-            "scrape_preview_limit": int(getattr(cfg, "scrape_preview_limit", 8) or 8),
-            "scrape_nfo_fields": list(getattr(cfg, "scrape_nfo_fields", []) or []),
-
-            # Translation
-            "scrape_translate_enabled": bool(getattr(cfg, "scrape_translate_enabled", False)),
-            "scrape_translate_provider": str(getattr(cfg, "scrape_translate_provider", "google") or "google"),
-            "scrape_translate_target_lang": str(getattr(cfg, "scrape_translate_target_lang", "zh-CN") or "zh-CN"),
-            "scrape_translate_base_url": str(getattr(cfg, "scrape_translate_base_url", "") or ""),
-            "scrape_translate_api_key": str(getattr(cfg, "scrape_translate_api_key", "") or ""),
-            "scrape_translate_email": str(getattr(cfg, "scrape_translate_email", "") or ""),
-
-            # Trigger
-            "scrape_trigger_mode": str(getattr(cfg, "scrape_trigger_mode", "manual") or "manual"),
-            "scrape_trigger_interval_sec": int(getattr(cfg, "scrape_trigger_interval_sec", 3600) or 3600),
-            "scrape_trigger_watch_poll_sec": float(getattr(cfg, "scrape_trigger_watch_poll_sec", 10.0) or 10.0),
-            "scrape_trigger_watch_min_age_sec": float(getattr(cfg, "scrape_trigger_watch_min_age_sec", 300.0) or 300.0),
-            "scrape_trigger_watch_quiet_sec": float(getattr(cfg, "scrape_trigger_watch_quiet_sec", 30.0) or 30.0),
-
-            # ThePornDB (optional)
-            "theporndb_api_token": str(getattr(cfg, "theporndb_api_token", "") or ""),
+            "scrape_use_proxy": bool(cfg.scrape_use_proxy),
+            "scrape_proxy_url": cfg.scrape_proxy_url or "",
+            "scrape_output_dir": cfg.scrape_output_dir or "",
+            "scrape_structure": cfg.scrape_structure or "{actor}/{year}/{code}",
+            "scrape_rename": bool(cfg.scrape_rename),
+            "scrape_copy_source": bool(cfg.scrape_copy_source),
+            "scrape_existing_action": cfg.scrape_existing_action or "skip",
+            "scrape_threads": int(cfg.scrape_threads or 1),
+            "scrape_thread_delay_sec": float(cfg.scrape_thread_delay_sec or 0.0),
+            "scrape_javdb_delay_sec": float(cfg.scrape_javdb_delay_sec or 0.0),
+            "scrape_javbus_delay_sec": float(cfg.scrape_javbus_delay_sec or 0.0),
+            "scrape_sources": list(cfg.scrape_sources or []),
+            "scrape_sources_fallback": list(cfg.scrape_sources_fallback or []),
+            "scrape_sources_title": list(cfg.scrape_sources_title or []),
+            "scrape_sources_plot": list(cfg.scrape_sources_plot or []),
+            "scrape_sources_actors": list(cfg.scrape_sources_actors or []),
+            "scrape_sources_tags": list(cfg.scrape_sources_tags or []),
+            "scrape_sources_release": list(cfg.scrape_sources_release or []),
+            "scrape_sources_runtime": list(cfg.scrape_sources_runtime or []),
+            "scrape_sources_directors": list(cfg.scrape_sources_directors or []),
+            "scrape_sources_series": list(cfg.scrape_sources_series or []),
+            "scrape_sources_studio": list(cfg.scrape_sources_studio or []),
+            "scrape_sources_publisher": list(cfg.scrape_sources_publisher or []),
+            "scrape_sources_trailer": list(cfg.scrape_sources_trailer or []),
+            "scrape_sources_rating": list(cfg.scrape_sources_rating or []),
+            "scrape_sources_poster": list(cfg.scrape_sources_poster or []),
+            "scrape_sources_fanart": list(cfg.scrape_sources_fanart or []),
+            "scrape_sources_previews": list(cfg.scrape_sources_previews or []),
+            "scrape_write_nfo": bool(cfg.scrape_write_nfo),
+            "scrape_download_poster": bool(cfg.scrape_download_poster),
+            "scrape_download_fanart": bool(cfg.scrape_download_fanart),
+            "scrape_download_previews": bool(cfg.scrape_download_previews),
+            "scrape_download_trailer": bool(cfg.scrape_download_trailer),
+            "scrape_download_subtitle": bool(cfg.scrape_download_subtitle),
+            "scrape_subtitle_languages": list(cfg.scrape_subtitle_languages or []),
+            "scrape_preview_limit": int(cfg.scrape_preview_limit or 8),
+            "scrape_nfo_fields": list(cfg.scrape_nfo_fields or []),
+            "scrape_translate_enabled": bool(cfg.scrape_translate_enabled),
+            "scrape_translate_provider": cfg.scrape_translate_provider or "google",
+            "scrape_translate_target_lang": cfg.scrape_translate_target_lang or "zh-CN",
+            "scrape_translate_base_url": cfg.scrape_translate_base_url or "",
+            "scrape_translate_api_key": cfg.scrape_translate_api_key or "",
+            "scrape_translate_email": cfg.scrape_translate_email or "",
+            "scrape_trigger_mode": cfg.scrape_trigger_mode or "manual",
+            "scrape_trigger_interval_sec": int(cfg.scrape_trigger_interval_sec or 3600),
+            "scrape_trigger_watch_poll_sec": float(cfg.scrape_trigger_watch_poll_sec or 10.0),
+            "scrape_trigger_watch_min_age_sec": float(cfg.scrape_trigger_watch_min_age_sec or 300.0),
+            "scrape_trigger_watch_quiet_sec": float(cfg.scrape_trigger_watch_quiet_sec or 30.0),
+            "theporndb_api_token": cfg.theporndb_api_token or "",
         }
 
     def set_config(self, **updates) -> dict:
@@ -357,6 +347,30 @@ class ScrapeManager:
                     self._items[jid] = list(loaded)
                 items = list(loaded)
         return items[: max(1, int(limit or 500))]
+
+    @staticmethod
+    def _placeholder_row(job: "ScrapeJob", *, path: str | None = None, is_current: bool = False) -> dict:
+        """Create a placeholder row for a job that has no item data yet."""
+        row: dict = {
+            "job_id": job.id,
+            "job_status": job.status,
+            "job_created_at": job.created_at,
+            "job_completed_at": job.completed_at,
+            "job_current": job.current,
+            "job_total": job.total,
+            "job_current_file": job.current_file,
+            "path": path or job.current_file,
+            "code": None,
+            "title": None,
+            "plot": None,
+            "actors": [],
+            "tags": [],
+            "poster_url": None,
+            "fanart_url": None,
+        }
+        if is_current:
+            row["is_current"] = True
+        return row
 
     def list_history_items(self, limit_jobs: int = 20, limit_items_per_job: int = 500) -> list[dict]:
         """Flatten job->items into per-movie history rows for UI."""
@@ -397,50 +411,13 @@ class ScrapeManager:
                     except Exception:
                         continue
                 if not already:
-                    rows.append(
-                        {
-                            "job_id": j.id,
-                            "job_status": j.status,
-                            "job_created_at": j.created_at,
-                            "job_completed_at": j.completed_at,
-                            "job_current": j.current,
-                            "job_total": j.total,
-                            "job_current_file": j.current_file,
-                            "is_current": True,
-                            "path": cur_path,
-                            "code": None,
-                            "title": None,
-                            "plot": None,
-                            "actors": [],
-                            "tags": [],
-                            "poster_url": None,
-                            "fanart_url": None,
-                        }
-                    )
+                    rows.append(self._placeholder_row(j, path=cur_path, is_current=True))
 
             if item_rows:
                 rows.extend(item_rows)
             elif not cur_path:
                 # Fallback: show a placeholder row for the job even if items are not available yet.
-                rows.append(
-                    {
-                        "job_id": j.id,
-                        "job_status": j.status,
-                        "job_created_at": j.created_at,
-                        "job_completed_at": j.completed_at,
-                        "job_current": j.current,
-                        "job_total": j.total,
-                        "job_current_file": j.current_file,
-                        "path": j.current_file,
-                        "code": None,
-                        "title": None,
-                        "plot": None,
-                        "actors": [],
-                        "tags": [],
-                        "poster_url": None,
-                        "fanart_url": None,
-                    }
-                )
+                rows.append(self._placeholder_row(j))
 
         # Keep stable ordering: jobs desc, current row first within a job, then by path
         def _sort_key(r: dict):
@@ -462,7 +439,8 @@ class ScrapeManager:
             tmp = p + ".tmp"
             Path(tmp).write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
             os.replace(tmp, p)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to persist scrape items for job {job_id}: {e}")
             return
 
     def _load_items_from_disk(self, job_id: int) -> list[dict] | None:
@@ -712,379 +690,5 @@ class ScrapeManager:
         return {"status": "success", "job_id": job_id}
 
     def _worker(self, job_id: int) -> None:
-        with self._lock:
-            job = self._jobs.get(job_id)
-        if not job:
-            return
-
-        cfg = load_config()
-
-        # Pre-scan eligible files so UI has total/current_file early.
-        try:
-            min_age_sec = 0.0 if job.ignore_min_age else self._get_scrape_min_age_sec(cfg)
-            files = self._scan_eligible_videos(job.directory, min_age_sec=min_age_sec)
-            first = str(files[0]) if files else None
-            total = len(files)
-            with self._lock:
-                job.total = total
-                job.current = int(job.current or 0)
-                if (not job.current_file) and first:
-                    job.current_file = first
-                job.status = "Running"
-                self._persist_jobs_to_disk_locked()
-        except Exception:
-            # Even if scan fails, continue; runner will log/scan later.
-            with self._lock:
-                job.status = "Running"
-                self._persist_jobs_to_disk_locked()
-
-        try:
-            from mr_banana.scraper.crawlers.javbus import JavbusConfig, JavbusCrawler
-            from mr_banana.scraper.crawlers.javdb import JavdbConfig, JavdbCrawler
-            from mr_banana.scraper.crawlers.dmm import DmmConfig, DmmCrawler
-            from mr_banana.scraper.crawlers.javtrailers import JavtrailersConfig, JavtrailersCrawler
-            from mr_banana.scraper.crawlers.theporndb import ThePornDBConfig, ThePornDBCrawler
-            from mr_banana.scraper.runner import scrape_directory
-        except Exception as e:
-            self._append_log(job_id, f"Scrape failed: init error: {e}")
-            with self._lock:
-                j = self._jobs.get(job_id)
-                if j:
-                    j.status = "Failed"
-                    j.completed_at = time.time()
-                    self._persist_jobs_to_disk_locked()
-            return
-
-        use_proxy = bool(getattr(cfg, "scrape_use_proxy", False))
-        proxy_url = str(getattr(cfg, "scrape_proxy_url", "") or "").strip() if use_proxy else ""
-
-        def job_log(message: str) -> None:
-            self._append_log(job_id, message)
-
-        def _cfg_list(name: str) -> list[str]:
-            v = getattr(cfg, name, None)
-            return list(v or []) if isinstance(v, list) else []
-
-        field_sources: dict[str, list[str]] = {
-            "title": _cfg_list("scrape_sources_title"),
-            "plot": _cfg_list("scrape_sources_plot"),
-            "actors": _cfg_list("scrape_sources_actors"),
-            "tags": _cfg_list("scrape_sources_tags"),
-            "release": _cfg_list("scrape_sources_release"),
-            "runtime": _cfg_list("scrape_sources_runtime"),
-            "studio": _cfg_list("scrape_sources_studio"),
-            "publisher": _cfg_list("scrape_sources_publisher"),
-            "trailer_url": _cfg_list("scrape_sources_trailer"),
-            "rating": _cfg_list("scrape_sources_rating"),
-            "poster_url": _cfg_list("scrape_sources_poster"),
-            "fanart_url": _cfg_list("scrape_sources_fanart"),
-            "preview_urls": _cfg_list("scrape_sources_previews"),
-        }
-
-        sources_set: set[str] = set()
-        for lst in field_sources.values():
-            for s in lst or []:
-                sources_set.add(str(s))
-
-        # Safety: if somehow nothing is enabled, fall back to legacy scrape_sources.
-        if not sources_set:
-            sources_set = set(list(getattr(cfg, "scrape_sources", ["javbus", "dmm", "javdb"]) or ["javbus", "dmm", "javdb"]))
-
-        # Stable crawler creation order: javbus -> dmm -> javdb -> javtrailers -> theporndb.
-        sources = [s for s in ["javbus", "dmm", "javdb", "javtrailers", "theporndb"] if s in sources_set]
-        crawlers = []
-        for s in sources:
-            if s == "javdb":
-                crawlers.append(
-                    JavdbCrawler(
-                        JavdbConfig(
-                            cookie=getattr(cfg, "javdb_cookie", "") or "",
-                            request_delay_sec=float(getattr(cfg, "scrape_javdb_delay_sec", 0.0) or 0.0),
-                            proxy_url=proxy_url,
-                        ),
-                        log_fn=job_log,
-                    )
-                )
-            elif s == "javbus":
-                crawlers.append(
-                    JavbusCrawler(
-                        JavbusConfig(
-                            cookie=getattr(cfg, "javbus_cookie", "") or "",
-                            request_delay_sec=float(getattr(cfg, "scrape_javbus_delay_sec", 0.0) or 0.0),
-                            proxy_url=proxy_url,
-                        ),
-                        log_fn=job_log,
-                    )
-                )
-            elif s == "dmm":
-                crawlers.append(
-                    DmmCrawler(
-                        DmmConfig(
-                            request_delay_sec=float(getattr(cfg, "scrape_javdb_delay_sec", 0.0) or 0.0),
-                            proxy_url=proxy_url,
-                        ),
-                        log_fn=job_log,
-                    )
-                )
-            elif s == "javtrailers":
-                crawlers.append(
-                    JavtrailersCrawler(
-                        JavtrailersConfig(
-                            request_delay_sec=float(getattr(cfg, "scrape_javdb_delay_sec", 0.0) or 0.0),
-                            proxy_url=proxy_url,
-                        ),
-                        log_fn=job_log,
-                    )
-                )
-            elif s == "theporndb":
-                crawlers.append(
-                    ThePornDBCrawler(
-                        ThePornDBConfig(
-                            api_token=str(getattr(cfg, "theporndb_api_token", "") or ""),
-                            request_delay_sec=float(getattr(cfg, "scrape_javdb_delay_sec", 0.0) or 0.0),
-                            proxy_url=proxy_url,
-                        ),
-                        log_fn=job_log,
-                    )
-                )
-
-        if not crawlers:
-            self._append_log(job_id, "Scrape failed: no sources enabled")
-            with self._lock:
-                job.status = "Failed"
-                job.completed_at = time.time()
-            return
-
-        def progress_cb(current: int, total: int, current_file: str):
-            with self._lock:
-                j = self._jobs.get(job_id)
-                if not j:
-                    return
-                j.current = current
-                j.total = total
-                j.current_file = current_file
-
-        try:
-            out_dir_raw = str(getattr(cfg, "scrape_output_dir", "") or "").strip()
-            out_root = Path(out_dir_raw).expanduser().resolve() if out_dir_raw else None
-
-            def to_item(r) -> dict:
-                m = r.merged
-                data = m.data or {}
-
-                preview_local_urls: list[str] = []
-                poster_local_url: str | None = None
-                fanart_local_url: str | None = None
-                try:
-                    pdir = Path(str(r.path)).expanduser().resolve().parent
-                    video_stem = Path(str(r.path)).stem
-
-                    # Determine the root directory for generating relative URLs
-                    # Use out_root if available and pdir is under it, otherwise use pdir's parent
-                    url_root = None
-                    if out_root and out_root.exists() and out_root.is_dir():
-                        try:
-                            # Check if pdir is under out_root
-                            pdir.relative_to(out_root)
-                            url_root = out_root
-                        except ValueError:
-                            # pdir is not under out_root, use pdir itself as root
-                            url_root = pdir
-                    else:
-                        url_root = pdir
-
-                    if url_root and pdir.exists() and pdir.is_dir():
-                        # Find local poster
-                        for ext in ('.jpg', '.jpeg', '.png', '.webp'):
-                            poster_path = pdir / f"{video_stem}-poster{ext}"
-                            if poster_path.exists() and poster_path.is_file():
-                                try:
-                                    rel = str(poster_path.relative_to(url_root))
-                                    poster_local_url = f"/api/library/file?rel={quote(rel)}"
-                                except Exception:
-                                    pass
-                                break
-
-                        # Find local fanart
-                        for ext in ('.jpg', '.jpeg', '.png', '.webp'):
-                            fanart_path = pdir / f"{video_stem}-fanart{ext}"
-                            if fanart_path.exists() and fanart_path.is_file():
-                                try:
-                                    rel = str(fanart_path.relative_to(url_root))
-                                    fanart_local_url = f"/api/library/file?rel={quote(rel)}"
-                                except Exception:
-                                    pass
-                                break
-
-                        # Find local previews - scan directory for preview files
-                        # Priority: use preview_files from data, fallback to glob scanning
-                        preview_files = data.get("preview_files") or []
-                        if not preview_files:
-                            # Fallback: scan for preview files in the directory
-                            try:
-                                preview_files = sorted(
-                                    [p.name for p in pdir.glob(f"{video_stem}-preview-*.*") if p.is_file()]
-                                )
-                            except Exception:
-                                preview_files = []
-                        
-                        for name in preview_files:
-                            try:
-                                fp = (pdir / str(name)).resolve()
-                                if not fp.exists() or not fp.is_file():
-                                    continue
-                                rel = str(fp.relative_to(url_root))
-                                preview_local_urls.append(f"/api/library/file?rel={quote(rel)}")
-                            except Exception:
-                                continue
-                except Exception:
-                    preview_local_urls = []
-
-                # Find local trailer file
-                trailer_local_url = None
-                try:
-                    trailer_file = data.get("trailer_file")
-                    if trailer_file and pdir:
-                        trailer_fp = (pdir / str(trailer_file)).resolve()
-                        if trailer_fp.exists() and trailer_fp.is_file():
-                            rel = str(trailer_fp.relative_to(out_root))
-                            trailer_local_url = f"/api/library/file?rel={quote(rel)}"
-                except Exception:
-                    pass
-
-                return {
-                    "path": str(r.path),
-                    "title": m.title,
-                    "code": m.external_id,
-                    "url": m.original_url,
-                    "release": data.get("release"),
-                    "studio": data.get("studio"),
-                    "series": data.get("series"),
-                    "runtime": data.get("runtime"),
-                    "directors": data.get("directors") or [],
-                    "trailer_url": data.get("trailer_url"),
-                    "trailer_local_url": trailer_local_url,
-                    "plot": data.get("plot"),
-                    "actors": data.get("actors") or [],
-                    "tags": data.get("tags") or [],
-                    "poster_url": data.get("poster_url") or data.get("cover_url"),
-                    "poster_local_url": poster_local_url,
-                    "fanart_url": data.get("fanart_url") or data.get("cover_url"),
-                    "fanart_local_url": fanart_local_url,
-                    "preview_urls": data.get("preview_urls") or [],
-                    "preview_local_urls": preview_local_urls,
-                    "subtitles": [str(p) for p in (r.subtitles or [])],
-                }
-
-            def item_cb(r) -> None:
-                try:
-                    it = to_item(r)
-                    # Per-movie completion time (so UI can show end time immediately
-                    # without waiting for the entire job to finish).
-                    it["item_completed_at"] = time.time()
-                    with self._lock:
-                        cur = list(self._items.get(job_id, []) or [])
-                        cur.append(it)
-                        self._items[job_id] = cur
-                    # Persist incrementally so history remains stable during long-running jobs.
-                    # (Previously we only persisted at job end; if frontend polls between items,
-                    # a transient empty/partial in-memory state could make completed rows appear to "disappear".)
-                    try:
-                        self._persist_items_to_disk(job_id, cur)
-                    except Exception:
-                        pass
-                except Exception:
-                    return
-
-            results = scrape_directory(
-                job.directory,
-                crawlers=crawlers,
-                progress_cb=progress_cb,
-                log_cb=job_log,
-                item_cb=item_cb,
-                options={
-                    "output_dir": getattr(cfg, "scrape_output_dir", "") or "",
-                    "structure": getattr(cfg, "scrape_structure", "{actor}/{year}/{code}")
-                    or "{actor}/{year}/{code}",
-                    "rename": bool(getattr(cfg, "scrape_rename", True)),
-                    "copy_source": bool(getattr(cfg, "scrape_copy_source", True)),
-                    "existing_action": str(getattr(cfg, "scrape_existing_action", "skip") or "skip"),
-                    "threads": int(getattr(cfg, "scrape_threads", 1) or 1),
-                    "thread_delay_sec": float(getattr(cfg, "scrape_thread_delay_sec", 0.0) or 0.0),
-
-                    # Safety for auto-trigger runs; manual runs can ignore min-age.
-                    "min_age_sec": 0.0
-                    if job.ignore_min_age
-                    else float(getattr(cfg, "scrape_trigger_watch_min_age_sec", 0.0) or 0.0),
-
-                    "write_nfo": bool(getattr(cfg, "scrape_write_nfo", True)),
-                    "download_poster": bool(getattr(cfg, "scrape_download_poster", True)),
-                    "download_fanart": bool(getattr(cfg, "scrape_download_fanart", True)),
-                    "download_previews": bool(getattr(cfg, "scrape_download_previews", False)),
-                    "download_trailer": bool(getattr(cfg, "scrape_download_trailer", False)),
-                    "download_subtitle": bool(getattr(cfg, "scrape_download_subtitle", False)),
-                    "subtitle_languages": list(getattr(cfg, "scrape_subtitle_languages", []) or []),
-                    "preview_limit": int(getattr(cfg, "scrape_preview_limit", 8) or 8),
-                    "nfo_fields": list(getattr(cfg, "scrape_nfo_fields", []) or []),
-
-                    # Translation
-                    "translate_enabled": bool(getattr(cfg, "scrape_translate_enabled", False)),
-                    "translate_provider": str(getattr(cfg, "scrape_translate_provider", "google") or "google"),
-                    "translate_target_lang": str(getattr(cfg, "scrape_translate_target_lang", "zh-CN") or "zh-CN"),
-                    "translate_base_url": str(getattr(cfg, "scrape_translate_base_url", "") or ""),
-                    "translate_api_key": str(getattr(cfg, "scrape_translate_api_key", "") or ""),
-                    "translate_email": str(getattr(cfg, "scrape_translate_email", "") or ""),
-
-                    # Network
-                    "proxy_url": proxy_url,
-
-                    # Per-field sources used by the merger
-                    "field_sources": field_sources,
-                },
-            )
-
-            # Ensure final ordering is stable after completion.
-            try:
-                # Keep per-item timestamps recorded during the run.
-                with self._lock:
-                    existing = list(self._items.get(job_id, []) or [])
-                ts_by_path: dict[str, float] = {}
-                for it in existing:
-                    try:
-                        p = str((it or {}).get("path") or "").strip()
-                        tsv = (it or {}).get("item_completed_at")
-                        if p and isinstance(tsv, (int, float)):
-                            ts_by_path[p] = float(tsv)
-                    except Exception:
-                        continue
-
-                final_items: list[dict] = []
-                for r in (results or []):
-                    try:
-                        it = to_item(r)
-                        p = str(it.get("path") or "").strip()
-                        if p and p in ts_by_path:
-                            it["item_completed_at"] = ts_by_path[p]
-                        final_items.append(it)
-                    except Exception:
-                        continue
-                with self._lock:
-                    self._items[job_id] = final_items
-                self._persist_items_to_disk(job_id, final_items)
-            except Exception:
-                pass
-
-            self._append_log(job_id, "Scrape finished")
-            with self._lock:
-                job.status = "Completed"
-                job.completed_at = time.time()
-                self._persist_jobs_to_disk_locked()
-        except Exception as e:
-            self._append_log(job_id, f"Scrape failed: {e}")
-            with self._lock:
-                job.status = "Failed"
-                job.completed_at = time.time()
-                self._persist_jobs_to_disk_locked()
-
-
-scrape_manager = ScrapeManager()
+        from api.scrape_worker import run_scrape_worker
+        run_scrape_worker(self, job_id)

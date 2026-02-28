@@ -48,6 +48,7 @@ class HistoryManager:
                 timeout=30.0,
                 check_same_thread=False
             )
+            self._local.conn.row_factory = sqlite3.Row
             self._local.conn.execute("PRAGMA journal_mode=WAL")
             self._local.conn.execute("PRAGMA busy_timeout=30000")
         return self._local.conn
@@ -188,7 +189,6 @@ class HistoryManager:
     def get_task(self, task_id: int) -> Optional[Dict]:
         """根据任务 ID 获取任务记录"""
         with self._db_connection() as conn:
-            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM downloads WHERE id = ? LIMIT 1", (task_id,))
             row = cursor.fetchone()
@@ -263,7 +263,6 @@ class HistoryManager:
     def get_history(self, limit: int = 50) -> List[Dict]:
         """获取下载历史"""
         with self._db_connection() as conn:
-            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT * FROM downloads ORDER BY created_at DESC LIMIT ?",

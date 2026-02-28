@@ -5,6 +5,8 @@ Telegram Bot 推送模块
 import httpx
 from typing import Optional, List, Dict
 
+from mr_banana.utils.logger import logger
+
 
 class TelegramBot:
     """Telegram Bot 推送类"""
@@ -37,7 +39,7 @@ class TelegramBot:
                 )
                 return response.status_code == 200
         except Exception as e:
-            print(f"[Telegram] Failed to send message: {e}")
+            logger.error(f"Telegram: Failed to send message: {e}")
             return False
     
     def test_connection(self) -> tuple[bool, str]:
@@ -85,7 +87,7 @@ class TelegramBot:
         except httpx.TimeoutException:
             return False, "连接超时，请检查网络"
         except Exception as e:
-            print(f"[Telegram] Connection test failed: {e}")
+            logger.error(f"Telegram: Connection test failed: {e}")
             return False, str(e)
 
 

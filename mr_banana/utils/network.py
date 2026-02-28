@@ -1,11 +1,35 @@
 """
 网络请求模块 - 支持普通请求和浏览器模式
 """
+from __future__ import annotations
+
 import time
 from typing import Optional, Dict, Any
 from curl_cffi import requests
 from mr_banana.utils.logger import logger
 from mr_banana.utils.browser import BrowserManager
+
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+# Windows variant used by NetworkHandler/HLS downloader for different TLS fingerprint
+WINDOWS_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+
+def build_proxies(proxy_url: str | None) -> dict[str, str] | None:
+    """Build a proxies dict from a single proxy URL string.
+
+    Returns None when proxy_url is empty/None (meaning: no proxy).
+    """
+    pu = str(proxy_url or "").strip()
+    if not pu:
+        return None
+    return {"http": pu, "https": pu}
 
 
 class NetworkHandler:
@@ -23,7 +47,7 @@ class NetworkHandler:
         self.timeout = timeout
         self.proxies = proxies
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            "User-Agent": WINDOWS_USER_AGENT,
         }
         proxy_url = None
         try:

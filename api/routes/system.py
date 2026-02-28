@@ -10,6 +10,7 @@ from curl_cffi import requests
 from fastapi import APIRouter, HTTPException, Request
 from typing import List
 
+from api.async_utils import run_sync
 from api.schemas import ChooseDirectoryRequest, ListDirectoryRequest, OpenPathRequest
 
 # Allowed root directories for remote browsing (can be overridden by env var)
@@ -122,7 +123,7 @@ async def choose_directory(payload: ChooseDirectoryRequest, http_request: Reques
     if not _is_localhost(http_request):
         raise HTTPException(status_code=403, detail="choose-directory is only available from localhost")
 
-    selected = _choose_directory_native(payload.title, payload.initial_dir)
+    selected = await run_sync(_choose_directory_native, payload.title, payload.initial_dir)
     return {"path": selected}
 
 
@@ -191,20 +192,6 @@ async def test_source(source: str, http_request: Request):
     if not _is_localhost(http_request):
         raise HTTPException(status_code=403, detail="test-source is only available from localhost")
 
-
-@router.post("/api/system/open-path")
-async def open_path(payload: OpenPathRequest, http_request: Request):
-    if not _is_localhost(http_request):
-        raise HTTPException(status_code=403, detail="open-path is only available from localhost")
-
-    try:
-        _open_path_native(payload.path, reveal=bool(payload.reveal if payload.reveal is not None else True))
-        return {"ok": True}
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="path not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"failed to open path: {e}")
-
     source_id = (source or "").strip().lower()
     targets: dict[str, str] = {
         "dmm": "https://www.dmm.co.jp/",
@@ -220,7 +207,7 @@ async def open_path(payload: OpenPathRequest, http_request: Request):
 
     started = time.time()
     try:
-        resp = requests.get(url=url, timeout=8, verify=False, impersonate="chrome")
+        resp = await run_sync(requests.get, url=url, timeout=8, verify=False, impersonate="chrome")
         ok = bool(getattr(resp, "ok", False))
         status_code = int(getattr(resp, "status_code", 0) or 0)
         elapsed_ms = int((time.time() - started) * 1000)
@@ -241,3 +228,17 @@ async def open_path(payload: OpenPathRequest, http_request: Request):
             "url": url,
             "error": str(e),
         }
+
+
+@router.post("/api/system/open-path")
+async def open_path(payload: OpenPathRequest, http_request: Request):
+    if not _is_localhost(http_request):
+        raise HTTPException(status_code=403, detail="open-path is only available from localhost")
+
+    try:
+        await run_sync(_open_path_native, payload.path, bool(payload.reveal if payload.reveal is not None else True))
+        return {"ok": True}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="path not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to open path: {e}")

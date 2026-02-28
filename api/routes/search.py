@@ -3,13 +3,17 @@ Search API - Search for video metadata by code from JavDB and check Jable.tv ava
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from curl_cffi import requests
 
-from mr_banana.scraper.crawlers.javdb import JavdbCrawler, JavdbConfig
 from mr_banana.utils.config import load_config
+from mr_banana.utils.network import DEFAULT_USER_AGENT, build_proxies
+
+from api.async_utils import run_sync
+from api.subscription_checker import create_javdb_crawler
 
 router = APIRouter()
 
@@ -80,12 +84,10 @@ def check_jable_availability(code: str, proxy_url: str | None = None) -> tuple[b
     ]
     
     try:
-        proxies = None
-        if proxy_url:
-            proxies = {"http": proxy_url, "https": proxy_url}
-        
+        proxies = build_proxies(proxy_url)
+
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
         }
         
         for jable_url in url_variants:
@@ -137,21 +139,21 @@ async def search_by_code(code: str):
     
     # Load config for proxy settings
     cfg = load_config()
-    proxy_url = None
-    if getattr(cfg, "scrape_use_proxy", False):
-        proxy_url = getattr(cfg, "scrape_proxy_url", "") or None
-    
+    proxy_url = cfg.scrape_proxy_url if cfg.scrape_use_proxy else None
+
     result = SearchResult(
         found=False,
         code=normalized_code,
     )
-    
-    # Search JavDB
+
+    # Search JavDB and check Jable.tv in parallel
+    crawler = create_javdb_crawler()
+    crawl_result, (jable_available, jable_url) = await asyncio.gather(
+        run_sync(crawler.search_by_code, normalized_code),
+        run_sync(check_jable_availability, normalized_code, proxy_url),
+    )
+
     try:
-        javdb_cfg = JavdbConfig(proxy_url=proxy_url or "")
-        crawler = JavdbCrawler(cfg=javdb_cfg)
-        crawl_result = crawler.search_by_code(normalized_code)
-        
         if crawl_result and crawl_result.data:
             data = crawl_result.data
             result.javdb_found = True
@@ -172,7 +174,7 @@ async def search_by_code(code: str):
             result.preview_urls = data.get("preview_urls", [])
             result.trailer_url = data.get("trailer_url")
             result.javdb_url = crawl_result.original_url
-            
+
             # Process magnet links
             magnet_data = data.get("magnet_links", [])
             result.magnet_links = [
@@ -187,19 +189,18 @@ async def search_by_code(code: str):
                 if m.get("url")
             ]
     except Exception as e:
-        # Log error but continue to check Jable
-        print(f"JavDB search error: {e}")
-    
-    # Check Jable.tv availability
+        from mr_banana.utils.logger import logger
+        logger.error(f"JavDB search error: {e}")
+
     try:
-        jable_available, jable_url = check_jable_availability(normalized_code, proxy_url)
         result.jable_available = jable_available
         result.jable_url = jable_url
         if jable_available:
             result.found = True
     except Exception as e:
-        print(f"Jable check error: {e}")
-    
+        from mr_banana.utils.logger import logger
+        logger.error(f"Jable check error: {e}")
+
     return result
 
 

@@ -5,10 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urljoin, urlparse
 
-from curl_cffi import requests
-
+from mr_banana.utils.network import DEFAULT_USER_AGENT
 from ..types import CrawlResult, MediaInfo
-from .base import BaseCrawler, extract_jav_code
+from .base import BaseCrawler
 
 
 @dataclass
@@ -30,55 +29,16 @@ class JavbusCrawler(BaseCrawler):
     name = "javbus"
 
     def __init__(self, cfg: JavbusConfig | None = None, log_fn=None):
-        self.cfg = cfg or JavbusConfig()
-        self._log = log_fn
-
-    def _emit(self, msg: str) -> None:
-        if self._log:
-            try:
-                self._log(msg)
-            except Exception:
-                pass
+        super().__init__(cfg=cfg or JavbusConfig(), log_fn=log_fn)
 
     def _headers(self) -> dict[str, str]:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
             "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6",
         }
         if self.cfg.cookie:
             headers["Cookie"] = self.cfg.cookie
         return headers
-
-    def _get_text(self, url: str) -> str | None:
-        try:
-            self._emit(f"GET {url}")
-            if self.cfg.request_delay_sec and self.cfg.request_delay_sec > 0:
-                import time
-
-                time.sleep(float(self.cfg.request_delay_sec))
-            proxies = None
-            if getattr(self.cfg, "proxy_url", ""):
-                pu = str(self.cfg.proxy_url).strip()
-                if pu:
-                    proxies = {"http": pu, "https": pu}
-            r = requests.get(
-                url,
-                headers=self._headers(),
-                timeout=25,
-                verify=False,
-                impersonate="chrome",
-                proxies=proxies,
-            )
-            self._emit(f"<- {r.status_code} {url}")
-            if r.status_code != 200:
-                return None
-            return r.text
-        except Exception as e:
-            self._emit(f"!! request error {url}: {e}")
-            return None
-
-    def _extract_code(self, file_path: Path) -> str | None:
-        return extract_jav_code(file_path)
 
     def _is_blocked(self, html: str) -> str | None:
         low = (html or "").lower()

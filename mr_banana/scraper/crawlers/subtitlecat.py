@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 
 from curl_cffi import requests
 
+from mr_banana.utils.network import DEFAULT_USER_AGENT, build_proxies
 from ..types import CrawlResult, MediaInfo
 from .base import BaseCrawler
 
@@ -32,15 +33,13 @@ class SubtitleCatCrawler(BaseCrawler):
 
     def _headers(self) -> dict[str, str]:
         return {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         }
 
     def _get_proxies(self):
-        if self.proxy_url:
-            return {"http": self.proxy_url, "https": self.proxy_url}
-        return None
+        return build_proxies(self.proxy_url)
 
     def crawl(self, file_path: Path, media: MediaInfo) -> CrawlResult | None:
         # This crawler is special: it doesn't return metadata for merging.

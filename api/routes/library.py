@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import os
+import socket
+import time as _time
 from pathlib import Path
 from urllib.parse import quote, unquote
 from xml.etree import ElementTree as ET
@@ -9,34 +12,40 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from mr_banana.utils.config import load_config
+from mr_banana.utils.network import DEFAULT_USER_AGENT
+
+from api.async_utils import run_sync
+from api.security import get_all_media_roots, get_library_root
 
 router = APIRouter()
 
-
-def _get_library_root() -> Path | None:
-    cfg = load_config()
-    # Priority: player_root_dir > scrape_output_dir (播放器优先)
-    root_dir = str(getattr(cfg, "player_root_dir", "") or "").strip() or str(getattr(cfg, "scrape_output_dir", "") or "").strip()
-    if not root_dir:
-        return None
-    root = Path(os.path.expanduser(root_dir))
-    if not root.exists() or not root.is_dir():
-        return None
-    return root
+# Simple TTL cache for library NFO listing (avoids rglob on every API call)
+_nfo_cache: dict[str, tuple[float, list[Path]]] = {}
+_NFO_CACHE_TTL = 30.0  # seconds
 
 
-def _get_all_media_roots() -> list[Path]:
-    """Get all possible media root directories (output dir, input dir, player root)."""
-    cfg = load_config()
-    roots = []
-    for attr in ("scrape_output_dir", "scrape_input_dir", "player_root_dir"):
-        dir_str = str(getattr(cfg, attr, "") or "").strip()
-        if not dir_str:
-            continue
-        root = Path(os.path.expanduser(dir_str))
-        if root.exists() and root.is_dir() and root not in roots:
-            roots.append(root)
-    return roots
+def _get_cached_nfos(root: Path) -> list[Path]:
+    """Return NFO files under root, cached for _NFO_CACHE_TTL seconds."""
+    cache_key = str(root)
+    now = _time.time()
+    cached = _nfo_cache.get(cache_key)
+    if cached is not None:
+        ts, nfos = cached
+        if now - ts < _NFO_CACHE_TTL:
+            return list(nfos)
+
+    nfos: list[Path] = []
+    try:
+        for p in root.rglob("*.nfo"):
+            if p.is_file():
+                nfos.append(p)
+    except Exception:
+        return []
+
+    _nfo_cache[cache_key] = (now, nfos)
+    return nfos
+
+
 
 
 def _safe_join_under_root(root: Path, rel: str) -> Path:
@@ -103,21 +112,12 @@ def _parse_movie_nfo(nfo_path: Path) -> dict:
     }
 
 
-@router.get("/api/library/items")
-async def list_library_items(limit: int = 200):
-    root = _get_library_root()
-    if root is None:
-        return []
-
+def _build_library_items(root: Path, max_items: int) -> list[dict]:
+    """Build library item list synchronously (file I/O heavy)."""
     items: list[dict] = []
-    max_items = max(1, min(int(limit or 200), 500))
 
-    nfos: list[Path] = []
-    try:
-        for p in root.rglob("*.nfo"):
-            if p.is_file():
-                nfos.append(p)
-    except Exception:
+    nfos = _get_cached_nfos(root)
+    if not nfos:
         return []
 
     nfos.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
@@ -144,12 +144,12 @@ async def list_library_items(limit: int = 200):
         except Exception:
             video_path = None
 
-        def asset_url(filename: str | None) -> str | None:
+        def asset_url(filename: str | None, _nfo=nfo, _root=root) -> str | None:
             if not filename:
                 return None
             try:
-                asset_path = (nfo.parent / filename)
-                rel = str(asset_path.relative_to(root))
+                asset_path = (_nfo.parent / filename)
+                rel = str(asset_path.relative_to(_root))
             except Exception:
                 return None
             return f"/api/library/file?rel={quote(rel)}"
@@ -199,10 +199,19 @@ async def list_library_items(limit: int = 200):
     return items
 
 
+@router.get("/api/library/items")
+async def list_library_items(limit: int = 200):
+    root = get_library_root()
+    if root is None:
+        return []
+    max_items = max(1, min(int(limit or 200), 500))
+    return await run_sync(_build_library_items, root, max_items)
+
+
 @router.get("/api/library/file")
 async def get_library_file(rel: str):
     # Try all possible media roots to find the file
-    roots = _get_all_media_roots()
+    roots = get_all_media_roots()
     if not roots:
         raise HTTPException(status_code=404, detail="library root is not configured")
 
@@ -236,7 +245,7 @@ async def get_library_file(rel: str):
 @router.get("/api/library/video")
 async def stream_library_video(rel: str, request: Request):
     # Try all possible media roots to find the file
-    roots = _get_all_media_roots()
+    roots = get_all_media_roots()
     if not roots:
         raise HTTPException(status_code=404, detail="library root is not configured")
 
@@ -314,6 +323,27 @@ async def stream_library_video(rel: str, request: Request):
     return StreamingResponse(iter_file(start, end), status_code=206, media_type=media_type, headers=headers)
 
 
+def _is_private_ip(hostname: str) -> bool:
+    """Check if a hostname resolves to a private/reserved IP address (SSRF protection)."""
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+        for addr_info in addr_infos:
+            ip_str = addr_info[4][0]
+            ip = ipaddress.ip_address(ip_str)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+                or ip.is_unspecified
+            ):
+                return True
+        return False
+    except (socket.gaierror, ValueError):
+        return True
+
+
 @router.get("/api/image-proxy")
 async def image_proxy(url: str, referer: str | None = None):
     raw = str(url or "").strip()
@@ -328,6 +358,12 @@ async def image_proxy(url: str, referer: str | None = None):
         parsed = urlparse(raw)
         if not parsed.scheme or not parsed.netloc:
             raise HTTPException(status_code=400, detail="invalid url")
+
+        # SSRF protection: block internal/private IP addresses
+        hostname = parsed.hostname
+        if not hostname or _is_private_ip(hostname):
+            raise HTTPException(status_code=403, detail="access to internal addresses is not allowed")
+
         default_ref = f"{parsed.scheme}://{parsed.netloc}/"
     except HTTPException:
         raise
@@ -336,14 +372,14 @@ async def image_proxy(url: str, referer: str | None = None):
 
     ref = str(referer or "").strip() or default_ref
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "User-Agent": DEFAULT_USER_AGENT,
         "Referer": ref,
     }
 
     try:
         from curl_cffi import requests as crequests  # type: ignore
 
-        r = crequests.get(raw, timeout=25, verify=False, impersonate="chrome", headers=headers)
+        r = await run_sync(crequests.get, raw, timeout=25, verify=False, impersonate="chrome", headers=headers)
         if r.status_code != 200:
             raise HTTPException(status_code=502, detail=f"upstream status {r.status_code}")
         content_type = (r.headers.get("content-type") if hasattr(r, "headers") else None) or "image/jpeg"

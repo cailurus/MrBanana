@@ -5,10 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from curl_cffi import requests
-
+from mr_banana.utils.network import DEFAULT_USER_AGENT
 from ..types import CrawlResult, MediaInfo
-from .base import BaseCrawler, extract_jav_code
+from .base import BaseCrawler
 
 
 @dataclass
@@ -27,55 +26,14 @@ class ThePornDBCrawler(BaseCrawler):
     name = "theporndb"
 
     def __init__(self, cfg: ThePornDBConfig | None = None, log_fn=None):
-        self.cfg = cfg or ThePornDBConfig()
-        self._log = log_fn
-
-    def _emit(self, msg: str) -> None:
-        if self._log:
-            try:
-                self._log(msg)
-            except Exception:
-                pass
-
-    def _extract_code(self, file_path: Path) -> str | None:
-        return extract_jav_code(file_path)
+        super().__init__(cfg=cfg or ThePornDBConfig(), log_fn=log_fn)
 
     def _headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.cfg.api_token}",
             "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
         }
-
-    def _get_json(self, url: str) -> dict | None:
-        try:
-            self._emit(f"GET {url}")
-            if self.cfg.request_delay_sec and self.cfg.request_delay_sec > 0:
-                import time
-
-                time.sleep(float(self.cfg.request_delay_sec))
-
-            proxies = None
-            if getattr(self.cfg, "proxy_url", ""):
-                pu = str(self.cfg.proxy_url).strip()
-                if pu:
-                    proxies = {"http": pu, "https": pu}
-
-            r = requests.get(
-                url,
-                headers=self._headers(),
-                timeout=25,
-                verify=False,
-                impersonate="chrome",
-                proxies=proxies,
-            )
-            self._emit(f"<- {r.status_code} {url}")
-            if r.status_code != 200:
-                return None
-            return r.json()
-        except Exception as e:
-            self._emit(f"!! request error {url}: {e}")
-            return None
 
     def crawl(self, file_path: Path, media: MediaInfo) -> CrawlResult | None:
         code = self._extract_code(file_path)

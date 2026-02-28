@@ -378,15 +378,3 @@ class SubscriptionManager:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM subscriptions")
             return cursor.rowcount
-
-
-# 全局单例
-_subscription_manager: Optional[SubscriptionManager] = None
-
-
-def get_subscription_manager() -> SubscriptionManager:
-    """获取订阅管理器单例"""
-    global _subscription_manager
-    if _subscription_manager is None:
-        _subscription_manager = SubscriptionManager()
-    return _subscription_manager

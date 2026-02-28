@@ -11,13 +11,17 @@ from mr_banana.utils.logger import logger
 class BrowserManager:
     """浏览器管理器，用于获取需要 JavaScript 渲染的页面内容"""
 
+    _chromium_checked: bool = False  # Class-level: only run install once per process
+
     def __init__(self, headless: bool = True, proxy_url: str | None = None):
         self.headless = headless
         self.proxy_url = (proxy_url or "").strip() or None
         self._ensure_patchright_chromium_installed()
 
     def _ensure_patchright_chromium_installed(self):
-        """确保 patchright chromium 已安装"""
+        """确保 patchright chromium 已安装（进程内只执行一次）"""
+        if BrowserManager._chromium_checked:
+            return
         try:
             subprocess.run(
                 ["patchright", "install", "chromium"],
@@ -25,6 +29,7 @@ class BrowserManager:
                 text=True,
                 check=False,
             )
+            BrowserManager._chromium_checked = True
         except FileNotFoundError:
             logger.error("patchright command not found; please ensure patchright is installed")
             raise
@@ -85,7 +90,8 @@ class BrowserManager:
             locale="en-US",
             timezone_id="America/New_York",
             permissions=["geolocation"],
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # Use same Chrome version as WINDOWS_USER_AGENT in network.py
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         )
 
     def _process_page(self, page: Page, url: str) -> str:

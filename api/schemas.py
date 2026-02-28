@@ -133,3 +133,132 @@ class OpenPathRequest(BaseModel):
 
 class PlayerConfigRequest(BaseModel):
     player_root_dir: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Response TypedDicts (zero-overhead type hints for handler return values)
+# ---------------------------------------------------------------------------
+
+from typing import TypedDict, NotRequired
+
+
+class OperationResult(TypedDict):
+    status: str  # "success" | "error" | "partial"
+    message: NotRequired[str]
+    task_id: NotRequired[int]
+
+
+class TaskInfo(TypedDict):
+    id: int
+    url: str
+    status: str
+    progress: float
+    speed: str
+    total_bytes: int
+    error: str | None
+    scrape_after_download: bool
+    scrape_job_id: int | None
+    scrape_status: str | None
+
+
+class LogReadResult(TypedDict):
+    exists: bool
+    text: str
+    next_offset: int
+
+
+class CleanupResult(TypedDict):
+    status: str
+    deleted: int
+    truncated_active: NotRequired[int]
+    truncated_running: NotRequired[int]
+    errors: int
+
+
+class ClearHistoryResult(TypedDict):
+    status: str
+    deleted_db_rows: NotRequired[int]
+    deleted_logs: NotRequired[int]
+    deleted_files: NotRequired[int]
+    errors: int
+    message: NotRequired[str]
+
+
+class SubscriptionCheckResult(TypedDict):
+    status: str
+    checked_count: int
+    updated_count: int
+    message: str
+
+
+class SingleCheckResult(TypedDict):
+    status: str
+    has_update: bool
+    new_count: NotRequired[int]
+    message: NotRequired[str]
+
+
+class ScrapeJobInfo(TypedDict):
+    id: int
+    directory: str
+    status: str
+    created_at: float
+    completed_at: float | None
+    current: int
+    total: int
+    current_file: str | None
+
+
+class ScrapeStartResult(TypedDict):
+    status: str
+    job_id: NotRequired[int]
+    message: NotRequired[str]
+
+
+class PendingCountResult(TypedDict):
+    status: str
+    directory: str
+    count: int
+    min_age_sec: NotRequired[float]
+    message: NotRequired[str]
+
+
+class LibraryItem(TypedDict):
+    video_rel: str | None
+    video_abs: str | None
+    title: str
+    code: str
+    url: str | None
+    release: str | None
+    studio: str | None
+    plot: str | None
+    actors: list[str]
+    tags: list[str]
+    poster_url: str | None
+    fanart_url: str | None
+    preview_urls: list[str]
+
+
+class TestSourceResult(TypedDict):
+    source: str
+    ok: bool
+    status_code: int
+    elapsed_ms: int
+    url: str
+    error: NotRequired[str]
+
+
+class VersionInfo(TypedDict):
+    version: str
+    repo: str
+
+
+class VersionCheckResult(TypedDict):
+    current_version: str
+    latest_version: NotRequired[str]
+    has_update: bool
+    release_url: NotRequired[str]
+    release_name: NotRequired[str]
+    published_at: NotRequired[str]
+    message: NotRequired[str]
+    error: NotRequired[str]

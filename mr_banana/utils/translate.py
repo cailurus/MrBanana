@@ -63,11 +63,8 @@ def translate_text(
         logger.warning("translate: curl_cffi not available; skip")
         return text
 
-    proxies = None
-    if proxy_url:
-        pu = str(proxy_url).strip()
-        if pu:
-            proxies = {"http": pu, "https": pu}
+    from mr_banana.utils.network import build_proxies
+    proxies = build_proxies(proxy_url)
 
     if provider == "deepl":
         key = str(api_key or "").strip()

@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.2.6';
+export const APP_VERSION = '0.2.7';
 
 export const UI_LANG_OPTIONS = [
     { value: 'zh-CN', labelKey: 'ui.lang.zhCN' },

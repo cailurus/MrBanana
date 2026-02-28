@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.manager import manager
+from api.dependencies import get_download_manager
+from api.manager import DownloadManager
 from api.schemas import (
     DownloadConfigRequest,
     DownloadRequest,
@@ -27,13 +28,13 @@ router = APIRouter()
 async def get_download_config():
     cfg = load_config()
     return {
-        "output_dir": getattr(cfg, "output_dir", "") or "",
-        "max_download_workers": int(getattr(cfg, "max_download_workers", 16) or 16),
-        "filename_format": getattr(cfg, "filename_format", "{id}"),
-        "download_use_proxy": bool(getattr(cfg, "download_use_proxy", False)),
-        "download_proxy_url": getattr(cfg, "download_proxy_url", "") or "",
-        "download_resolution": getattr(cfg, "download_resolution", "best") or "best",
-        "download_scrape_after_default": bool(getattr(cfg, "download_scrape_after_default", False)),
+        "output_dir": cfg.output_dir or "",
+        "max_download_workers": int(cfg.max_download_workers or 16),
+        "filename_format": cfg.filename_format,
+        "download_use_proxy": bool(cfg.download_use_proxy),
+        "download_proxy_url": cfg.download_proxy_url or "",
+        "download_resolution": cfg.download_resolution or "best",
+        "download_scrape_after_default": bool(cfg.download_scrape_after_default),
     }
 
 
@@ -47,7 +48,7 @@ async def save_download_config(request: DownloadConfigRequest):
         cfg.output_dir = output_dir
     if request.max_download_workers is not None:
         cfg.max_download_workers = max(
-            MIN_DOWNLOAD_WORKERS, 
+            MIN_DOWNLOAD_WORKERS,
             min(int(request.max_download_workers), MAX_DOWNLOAD_WORKERS)
         )
     if request.filename_format is not None:
@@ -69,12 +70,15 @@ async def save_download_config(request: DownloadConfigRequest):
 
 
 @router.post("/api/download")
-async def start_download(request: DownloadRequest):
+async def start_download(
+    request: DownloadRequest,
+    manager: DownloadManager = Depends(get_download_manager),
+):
     output_dir = str(request.output_dir).strip()
     if not output_dir:
         raise HTTPException(status_code=400, detail="output_dir is required")
     validate_path_no_traversal(output_dir)
-    
+
     if not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)
@@ -92,18 +96,24 @@ async def start_download(request: DownloadRequest):
 
 
 @router.get("/api/history")
-async def get_history(limit: int = DEFAULT_HISTORY_LIMIT):
+async def get_history(
+    limit: int = Query(DEFAULT_HISTORY_LIMIT, ge=1, le=500),
+    manager: DownloadManager = Depends(get_download_manager),
+):
     history = manager.history_manager.get_history(limit)
     return [dict(row) for row in history]
 
 
 @router.post("/api/resume")
-async def resume_download(request: ResumeRequest):
+async def resume_download(
+    request: ResumeRequest,
+    manager: DownloadManager = Depends(get_download_manager),
+):
     output_dir = str(request.output_dir).strip()
     if not output_dir:
         raise HTTPException(status_code=400, detail="output_dir is required")
     validate_path_no_traversal(output_dir)
-    
+
     if not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)
@@ -117,7 +127,10 @@ async def resume_download(request: ResumeRequest):
 
 
 @router.post("/api/pause")
-async def pause_download(request: TaskRequest):
+async def pause_download(
+    request: TaskRequest,
+    manager: DownloadManager = Depends(get_download_manager),
+):
     result = manager.pause_task(request.task_id)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
@@ -125,7 +138,10 @@ async def pause_download(request: TaskRequest):
 
 
 @router.post("/api/delete")
-async def delete_task(request: TaskRequest):
+async def delete_task(
+    request: TaskRequest,
+    manager: DownloadManager = Depends(get_download_manager),
+):
     result = manager.delete_task(request.task_id)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
@@ -133,17 +149,25 @@ async def delete_task(request: TaskRequest):
 
 
 @router.get("/api/logs/{task_id}")
-async def get_task_logs(task_id: int, offset: int = 0):
+async def get_task_logs(
+    task_id: int,
+    offset: int = 0,
+    manager: DownloadManager = Depends(get_download_manager),
+):
     return manager.read_task_log(task_id=task_id, offset=offset)
 
 
 @router.post("/api/download/logs/cleanup")
-async def cleanup_download_logs():
+async def cleanup_download_logs(
+    manager: DownloadManager = Depends(get_download_manager),
+):
     return manager.cleanup_logs()
 
 
 @router.post("/api/download/history/clear")
-async def clear_download_history():
+async def clear_download_history(
+    manager: DownloadManager = Depends(get_download_manager),
+):
     res = manager.clear_history()
     if res.get("status") == "error":
         raise HTTPException(status_code=409, detail=res.get("message") or "failed")

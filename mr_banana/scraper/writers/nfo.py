@@ -19,7 +19,7 @@ except ImportError:
 from ..types import MediaInfo, CrawlResult
 
 from mr_banana.utils.hls import HLSDownloader
-from mr_banana.utils.network import NetworkHandler
+from mr_banana.utils.network import DEFAULT_USER_AGENT, NetworkHandler, build_proxies
 
 
 @dataclass
@@ -63,11 +63,7 @@ def _download_file(
     log_fn: Callable[[str], None] | None = None,
 ) -> bool:
     try:
-        proxies = None
-        if proxy_url:
-            pu = str(proxy_url).strip()
-            if pu:
-                proxies = {"http": pu, "https": pu}
+        proxies = build_proxies(proxy_url)
         r = requests.get(
             url,
             timeout=60,
@@ -106,11 +102,7 @@ def _download_hls(
     log_fn: Callable[[str], None] | None = None,
 ) -> bool:
     try:
-        proxies = None
-        if proxy_url:
-            pu = str(proxy_url).strip()
-            if pu:
-                proxies = {"http": pu, "https": pu}
+        proxies = build_proxies(proxy_url)
 
         net = NetworkHandler(timeout=60, proxies=proxies)
         dl = HLSDownloader(net)
@@ -151,11 +143,7 @@ def _download_image(
     log_fn: Callable[[str], None] | None = None,
 ) -> bool:
     try:
-        proxies = None
-        if proxy_url:
-            pu = str(proxy_url).strip()
-            if pu:
-                proxies = {"http": pu, "https": pu}
+        proxies = build_proxies(proxy_url)
         r = requests.get(
             url,
             timeout=25,
@@ -348,7 +336,7 @@ def write_nfo(video_path: Path, media: MediaInfo, meta: CrawlResult, options: Nf
 
     def _headers_for(u: str) -> dict[str, str]:
         h = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
         }
         ref = _referer_for(u)
         if ref:
@@ -412,11 +400,7 @@ def write_nfo(video_path: Path, media: MediaInfo, meta: CrawlResult, options: Nf
                 try:
                     test_url = preview_urls[0] if preview_urls else ""
                     if test_url:
-                        proxies = None
-                        if opts.proxy_url:
-                            pu = str(opts.proxy_url).strip()
-                            if pu:
-                                proxies = {"http": pu, "https": pu}
+                        proxies = build_proxies(opts.proxy_url)
                         rr = requests.get(
                             test_url,
                             timeout=15,

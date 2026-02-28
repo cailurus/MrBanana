@@ -2,9 +2,50 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+# Implemented crawl sources in this project
+_IMPLEMENTED_SOURCES = {"javdb", "jav321", "javbus", "dmm", "javtrailers", "theporndb"}
+
+# Canonical execution order
+_SOURCE_ORDER = ["javbus", "jav321", "dmm", "javdb", "javtrailers", "theporndb"]
+
+
+def _normalize_source_list(
+    value: object,
+    *,
+    default: list[str],
+    allow_empty: bool,
+    allowed_sources: set[str] | None = None,
+) -> list[str]:
+    """Normalize a list of crawl source names: dedupe, validate, enforce allowed set."""
+    allowed_set = allowed_sources if allowed_sources is not None else _IMPLEMENTED_SOURCES
+    if not isinstance(value, list):
+        value = list(default)
+    elif not value and allow_empty:
+        return []
+    elif not value:
+        value = list(default)
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in value:
+        s = str(x).strip().lower()
+        if not s or s in seen:
+            continue
+        if s not in _IMPLEMENTED_SOURCES:
+            continue
+        if s not in allowed_set:
+            continue
+        seen.add(s)
+        out.append(s)
+    if out:
+        return out
+    return [] if allow_empty else [s for s in default if s in _IMPLEMENTED_SOURCES and s in allowed_set]
 
 
 # Support custom config directory via environment variable
@@ -155,9 +196,6 @@ class AppConfig:
         if not self.scrape_subtitle_languages:
             self.scrape_subtitle_languages = ["zh", "ja"]
 
-        # Implemented sources in this project.
-        implemented = {"javdb", "jav321", "javbus", "dmm", "javtrailers", "theporndb"}
-
         # Per-field allowed sources (also used to limit UI options).
         allowed: dict[str, set[str]] = {
             "scrape_sources_fallback": {"javbus", "jav321", "dmm", "javdb"},
@@ -179,38 +217,8 @@ class AppConfig:
             "scrape_sources_previews": {"javtrailers", "javbus"},
         }
 
-        def _normalize_list(
-            value: object,
-            *,
-            default: list[str],
-            allow_empty: bool,
-            allowed_sources: set[str] | None = None,
-        ) -> list[str]:
-            allowed_set = allowed_sources if allowed_sources is not None else implemented
-            if not isinstance(value, list):
-                value = list(default)
-            elif not value and allow_empty:
-                return []
-            elif not value:
-                value = list(default)
-            out: list[str] = []
-            seen: set[str] = set()
-            for x in value:
-                s = str(x).strip().lower()
-                if not s or s in seen:
-                    continue
-                if s not in implemented:
-                    continue
-                if s not in allowed_set:
-                    continue
-                seen.add(s)
-                out.append(s)
-            if out:
-                return out
-            return [] if allow_empty else [s for s in default if s in implemented and s in allowed_set]
-
-        enabled_union = _normalize_list(self.scrape_sources, default=fallback_default, allow_empty=False)
-        self.scrape_sources_fallback = _normalize_list(
+        enabled_union = _normalize_source_list(self.scrape_sources, default=fallback_default, allow_empty=False)
+        self.scrape_sources_fallback = _normalize_source_list(
             self.scrape_sources_fallback,
             default=fallback_default,
             allow_empty=False,
@@ -218,138 +226,107 @@ class AppConfig:
         )
 
         # Per-field defaults match the user-provided specification.
-        self.scrape_sources_title = _normalize_list(
+        self.scrape_sources_title = _normalize_source_list(
             self.scrape_sources_title,
             default=["dmm", "javtrailers"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_title"),
         )
-        self.scrape_sources_plot = _normalize_list(
+        self.scrape_sources_plot = _normalize_source_list(
             self.scrape_sources_plot,
             default=["dmm"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_plot"),
         )
-        self.scrape_sources_actors = _normalize_list(
+        self.scrape_sources_actors = _normalize_source_list(
             self.scrape_sources_actors,
             default=["dmm", "javtrailers"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_actors"),
         )
-        self.scrape_sources_poster = _normalize_list(
+        self.scrape_sources_poster = _normalize_source_list(
             self.scrape_sources_poster,
             default=["javtrailers", "javbus"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_poster"),
         )
-        self.scrape_sources_fanart = _normalize_list(
+        self.scrape_sources_fanart = _normalize_source_list(
             self.scrape_sources_fanart,
             default=["javtrailers", "javbus"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_fanart"),
         )
-        self.scrape_sources_previews = _normalize_list(
+        self.scrape_sources_previews = _normalize_source_list(
             self.scrape_sources_previews,
             default=["javtrailers", "javbus"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_previews"),
         )
-        self.scrape_sources_trailer = _normalize_list(
+        self.scrape_sources_trailer = _normalize_source_list(
             self.scrape_sources_trailer,
             default=["javtrailers", "dmm"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_trailer"),
         )
 
-        self.scrape_sources_tags = _normalize_list(
+        self.scrape_sources_tags = _normalize_source_list(
             self.scrape_sources_tags,
             default=["dmm", "javtrailers"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_tags"),
         )
-        self.scrape_sources_release = _normalize_list(
+        self.scrape_sources_release = _normalize_source_list(
             self.scrape_sources_release,
             default=["dmm", "javtrailers"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_release"),
         )
-        self.scrape_sources_runtime = _normalize_list(
+        self.scrape_sources_runtime = _normalize_source_list(
             self.scrape_sources_runtime,
             default=["dmm", "javtrailers"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_runtime"),
         )
-        self.scrape_sources_directors = _normalize_list(
+        self.scrape_sources_directors = _normalize_source_list(
             self.scrape_sources_directors,
             default=["dmm"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_directors"),
         )
-        self.scrape_sources_series = _normalize_list(
+        self.scrape_sources_series = _normalize_source_list(
             self.scrape_sources_series,
             default=["dmm"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_series"),
         )
-        self.scrape_sources_studio = _normalize_list(
+        self.scrape_sources_studio = _normalize_source_list(
             self.scrape_sources_studio,
             default=["dmm", "javtrailers"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_studio"),
         )
-        self.scrape_sources_publisher = _normalize_list(
+        self.scrape_sources_publisher = _normalize_source_list(
             self.scrape_sources_publisher,
             default=["dmm", "javtrailers"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_publisher"),
         )
 
-        self.scrape_sources_rating = _normalize_list(
+        self.scrape_sources_rating = _normalize_source_list(
             self.scrape_sources_rating,
             default=["jav321", "javdb"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_rating"),
         )
-        self.scrape_sources_want = _normalize_list(
+        self.scrape_sources_want = _normalize_source_list(
             self.scrape_sources_want,
             default=["javdb"],
             allow_empty=True,
             allowed_sources=allowed.get("scrape_sources_want"),
         )
 
-        # Keep scrape_sources as the union for crawler execution.
-        # Also enforce overall ordering: javbus -> jav321 -> dmm -> javdb -> javtrailers -> theporndb.
-        union: list[str] = []
-        for s in (self.scrape_sources_fallback or []):
-            if s not in union:
-                union.append(s)
-        for lst in (
-            self.scrape_sources_title,
-            self.scrape_sources_plot,
-            self.scrape_sources_actors,
-            self.scrape_sources_tags,
-            self.scrape_sources_release,
-            self.scrape_sources_runtime,
-            self.scrape_sources_directors,
-            self.scrape_sources_series,
-            self.scrape_sources_studio,
-            self.scrape_sources_publisher,
-            self.scrape_sources_trailer,
-            self.scrape_sources_rating,
-            self.scrape_sources_want,
-            self.scrape_sources_poster,
-            self.scrape_sources_fanart,
-            self.scrape_sources_previews,
-        ):
-            for s in lst or []:
-                if s not in union:
-                    union.append(s)
-        # Merge with any legacy enabled sources.
-        for s in enabled_union:
-            if s not in union:
-                union.append(s)
-        ordered = [s for s in ["javbus", "jav321", "dmm", "javdb", "javtrailers", "theporndb"] if s in union]
-        self.scrape_sources = ordered
+        # Keep scrape_sources as the union for crawler execution (canonically ordered).
+        self.scrape_sources = self._compute_source_union(enabled_union)
         if not self.scrape_nfo_fields:
             self.scrape_nfo_fields = [
                 "title",
@@ -380,30 +357,73 @@ class AppConfig:
         if self.download_resolution not in {"best", "1080p", "720p", "480p", "360p"}:
             self.download_resolution = "best"
 
+    def _compute_source_union(self, enabled_union: list[str]) -> list[str]:
+        """Compute the union of all per-field source lists, ordered canonically."""
+        union: list[str] = []
+        for s in (self.scrape_sources_fallback or []):
+            if s not in union:
+                union.append(s)
+        for lst in (
+            self.scrape_sources_title, self.scrape_sources_plot,
+            self.scrape_sources_actors, self.scrape_sources_tags,
+            self.scrape_sources_release, self.scrape_sources_runtime,
+            self.scrape_sources_directors, self.scrape_sources_series,
+            self.scrape_sources_studio, self.scrape_sources_publisher,
+            self.scrape_sources_trailer, self.scrape_sources_rating,
+            self.scrape_sources_want, self.scrape_sources_poster,
+            self.scrape_sources_fanart, self.scrape_sources_previews,
+        ):
+            for s in lst or []:
+                if s not in union:
+                    union.append(s)
+        for s in enabled_union:
+            if s not in union:
+                union.append(s)
+        return [s for s in _SOURCE_ORDER if s in union]
+
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary for serialization."""
         return {k: v for k, v in self.__dict__.items()}
 
 
-def load_config() -> AppConfig:
-    if not CONFIG_PATH.exists():
-        return AppConfig()
-    try:
-        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return AppConfig()
+_config_lock = threading.Lock()
 
-    cfg = AppConfig()
-    for k, v in data.items():
-        if hasattr(cfg, k):
-            setattr(cfg, k, v)
-    # Re-normalize after applying persisted values.
-    try:
-        cfg.__post_init__()
-    except Exception:
-        pass
-    return cfg
+
+def load_config() -> AppConfig:
+    with _config_lock:
+        if not CONFIG_PATH.exists():
+            return AppConfig()
+        try:
+            data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return AppConfig()
+
+        cfg = AppConfig()
+        for k, v in data.items():
+            if hasattr(cfg, k):
+                setattr(cfg, k, v)
+        # Re-normalize after applying persisted values.
+        try:
+            cfg.__post_init__()
+        except Exception:
+            pass
+        return cfg
 
 
 def save_config(cfg: AppConfig) -> None:
-    CONFIG_PATH.write_text(json.dumps(cfg.__dict__, ensure_ascii=False, indent=4), encoding="utf-8")
+    content = json.dumps(cfg.__dict__, ensure_ascii=False, indent=4)
+    with _config_lock:
+        # Atomic write: temp file + os.replace to avoid partial writes
+        parent = CONFIG_PATH.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=str(parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp_path, str(CONFIG_PATH))
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise

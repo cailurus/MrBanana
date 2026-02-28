@@ -48,7 +48,7 @@ class JableExtractor(BaseExtractor):
             if title_from_meta:
                 title = title_from_meta
         except Exception:
-            pass
+            logger.debug("Jable: failed to extract title")
 
         try:
             og_image = self._get_og_image(page_html)
@@ -57,42 +57,42 @@ class JableExtractor(BaseExtractor):
                 metadata.setdefault("poster_url", og_image)
                 metadata.setdefault("fanart_url", og_image)
         except Exception:
-            pass
+            logger.debug("Jable: failed to extract og:image")
 
         try:
             plot = self._get_og_description(page_html)
             if plot:
                 metadata["plot"] = plot
         except Exception:
-            pass
+            logger.debug("Jable: failed to extract plot")
 
         try:
             release = self._get_release_date(page_html)
             if release:
                 metadata["release"] = release
         except Exception:
-            pass
+            logger.debug("Jable: failed to extract release date")
 
         try:
             actors = self._get_actors(page_html, base_url=url)
             if actors:
                 metadata["actors"] = actors
         except Exception:
-            pass
+            logger.debug("Jable: failed to extract actors")
 
         try:
             tags = self._get_tags(page_html, base_url=url)
             if tags:
                 metadata["tags"] = tags
         except Exception:
-            pass
+            logger.debug("Jable: failed to extract tags")
 
         try:
             preview_urls = self._get_preview_images(page_html, base_url=url)
             if preview_urls:
                 metadata["preview_urls"] = preview_urls
         except Exception:
-            pass
+            logger.debug("Jable: failed to extract preview images")
 
         return {
             "id": movie_id,

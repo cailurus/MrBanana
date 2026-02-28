@@ -62,14 +62,25 @@ data/
 Thumbs.db
 
 # Test and coverage
+tests/
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 .nox/
 
+# Linter caches
+.ruff_cache/
+.mypy_cache/
+
 # Documentation build
 docs/_build/
+
+# Config and plans
+.claude/
+CHANGELOG.md
+LICENSE
+Makefile
 
 # Temporary files
 *.tmp
