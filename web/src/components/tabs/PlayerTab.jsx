@@ -13,7 +13,7 @@ import { PlayerDetailModal, DirectoryBrowserModal } from '../modals';
 import { useGearAnimation, playSettingsOpenSfx, stopSettingsOpenSfx } from '../../hooks';
 import { usePlayerStore } from '../../stores';
 import { useScrapeStore } from '../../stores/scrapeStore';
-import { proxyImageUrl } from '../../utils/appHelpers';
+import { proxyImageUrl } from '../../utils/helpers';
 
 /**
  * PlayerTab Component

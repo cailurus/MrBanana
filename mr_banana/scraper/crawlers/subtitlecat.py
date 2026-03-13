@@ -42,9 +42,10 @@ class SubtitleCatCrawler(BaseCrawler):
         return build_proxies(self.proxy_url)
 
     def crawl(self, file_path: Path, media: MediaInfo) -> CrawlResult | None:
-        # This crawler is special: it doesn't return metadata for merging.
-        # It performs a side-effect (downloading subtitles) if invoked directly.
-        # However, the runner will likely call specific methods on it.
+        """Always returns None. This crawler is not registered in the runner's
+        metadata-crawl loop; it exists solely for subtitle downloading via
+        ``search_and_download()``, which the runner calls directly.  The method
+        is implemented only to satisfy the BaseCrawler interface."""
         return None
 
     def search_and_download(self, keyword: str, save_path_base: Path, languages: list[str] | None = None) -> list[Path]:

@@ -4,7 +4,7 @@
  */
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
-import { History, Download, Settings, ChevronDown, AlertCircle, Search, Copy, Check, ExternalLink, Magnet, Play, Clock, Users, Tag, Building, Film, Loader2, Plus, Bell, Link2 } from 'lucide-react';
+import { History, Download, Settings, ChevronDown, AlertCircle, Search, Copy, Check, ExternalLink, Magnet, Play, Clock, Users, Tag, Building, Film, Loader2, Plus, Bell, Link2, RotateCcw } from 'lucide-react';
 import { t } from '../../i18n';
 import { Button, Card, Input, Select, cn } from '../ui';
 import { clamp, extractCodeFromUrl, formatDateTime } from '../../utils/format';
@@ -364,6 +364,7 @@ export function DownloadTab({
     setDirPickerField,
     openLogViewer,
     setContextMenu,
+    onResume,
 }) {
     const toast = useToast();
     const tr = useCallback((key, vars) => t(uiLang, key, vars), [uiLang]);
@@ -894,6 +895,16 @@ export function DownloadTab({
                                                     <div className="flex items-center justify-center gap-2 min-w-0">
                                                         <NewStatusIcon status={status} type="download" error={item.error} />
                                                         <span className="truncate text-sm">{getStatusLabel(status, uiLang)}</span>
+                                                        {status === 'Failed' && onResume && (
+                                                            <button
+                                                                type="button"
+                                                                title={tr('download.menu.resume')}
+                                                                className="inline-flex items-center justify-center h-5 w-5 rounded-md text-red-400 hover:text-red-600 hover:bg-red-100 dark:hover:text-red-300 dark:hover:bg-red-900/30 transition-colors shrink-0"
+                                                                onClick={(e) => { e.stopPropagation(); onResume(item.id); }}
+                                                            >
+                                                                <RotateCcw className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="text-muted-foreground whitespace-nowrap text-sm">{scrapeText}</div>

@@ -8,6 +8,7 @@ from pathlib import Path
 from curl_cffi import requests
 
 from mr_banana.utils.network import DEFAULT_USER_AGENT
+from ..text_utils import derive_dmm_artwork, normalize_release_date
 from ..types import CrawlResult, MediaInfo
 from .base import BaseCrawler
 
@@ -74,31 +75,6 @@ class JavtrailersCrawler(BaseCrawler):
                 seen.add(s)
                 out.append(s)
         return out
-
-    def _derive_dmm_artwork(self, cover_url: str) -> tuple[str | None, str | None]:
-        """Derive DMM artwork variants.
-
-        DMM commonly exposes:
-        - poster (portrait): ...ps.jpg
-        - fanart (landscape): ...pl.jpg
-        """
-        u = str(cover_url or "").strip()
-        if not u:
-            return None, None
-        low = u.lower()
-        if "pics.dmm.co.jp/" not in low:
-            return None, None
-
-        # Only switch the final "ps.jpg" / "pl.jpg" suffix.
-        if re.search(r"(?i)ps\.jpg(?=$|\?)", u):
-            poster = u
-            fanart = re.sub(r"(?i)ps\.jpg(?=$|\?)", "pl.jpg", u, count=1)
-            return poster, fanart
-        if re.search(r"(?i)pl\.jpg(?=$|\?)", u):
-            fanart = u
-            poster = re.sub(r"(?i)pl\.jpg(?=$|\?)", "ps.jpg", u, count=1)
-            return poster, fanart
-        return None, None
 
     def _fetch_video_api(self, content_id: str) -> dict | None:
         """Fetch video data from javtrailers API. Returns parsed JSON or None."""
@@ -194,10 +170,7 @@ class JavtrailersCrawler(BaseCrawler):
         if isinstance(st, dict):
             studio = str(st.get("jpName") or st.get("name") or "").strip()
 
-        release = str(video.get("releaseDate") or "").strip()
-        # Normalize ISO date format (e.g., 2025-11-21T03:00:00.000Z) to simple date (2025-11-21)
-        if release and "T" in release:
-            release = release.split("T")[0]
+        release = normalize_release_date(str(video.get("releaseDate") or ""))
 
         duration = video.get("duration")
         runtime = ""
@@ -244,7 +217,7 @@ class JavtrailersCrawler(BaseCrawler):
         if cover:
             out.data["cover_url"] = cover
 
-            poster, fanart = self._derive_dmm_artwork(cover)
+            poster, fanart = derive_dmm_artwork(cover)
             if poster:
                 out.data["poster_url"] = poster
             if fanart:

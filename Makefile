@@ -80,6 +80,16 @@ web-dev:
 dev:
 	$(MAKE) -j2 api-dev web-dev
 
+.PHONY: test
+# Run full test suite with verbose output
+test:
+	$(PYTHON) -m pytest tests/ -v
+
+.PHONY: test-quick
+# Run tests with minimal output
+test-quick:
+	$(PYTHON) -m pytest tests/ -q
+
 .PHONY: web-build
 # Build frontend into web/dist (for single-port serve or Docker)
 web-build:

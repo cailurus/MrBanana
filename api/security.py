@@ -13,21 +13,10 @@ from mr_banana.utils.config import load_config
 
 
 def is_safe_path(base_path: str | Path, target_path: str | Path) -> bool:
-    """
-    Check if target_path is safely under base_path (no path traversal).
-    
-    Args:
-        base_path: The allowed base directory
-        target_path: The path to validate
-        
-    Returns:
-        True if target_path is safely under base_path
-    """
+    """Check if target_path is safely under base_path (no path traversal)."""
     try:
         base = Path(os.path.expanduser(str(base_path))).resolve()
         target = Path(os.path.expanduser(str(target_path))).resolve()
-        
-        # Check if target is under base
         return str(target).startswith(str(base) + os.sep) or target == base
     except Exception:
         return False
@@ -72,41 +61,24 @@ def validate_path_no_traversal(path: str) -> str:
 
 
 def safe_join_path(base_dir: str | Path, *paths: str) -> Path:
-    """
-    Safely join paths ensuring the result is under base_dir.
-    
-    Args:
-        base_dir: The base directory that must contain the result
-        *paths: Path components to join
-        
-    Returns:
-        The joined path
-        
-    Raises:
-        HTTPException: If the resulting path would be outside base_dir
+    """Safely join paths ensuring the result is under base_dir.
+
+    Raises HTTPException if the resulting path would escape base_dir.
     """
     base = Path(os.path.expanduser(str(base_dir))).resolve()
-    
-    # Clean and validate each path component
     clean_paths = []
     for p in paths:
         if p:
             validate_path_no_traversal(str(p))
             clean_paths.append(p)
-    
     if not clean_paths:
         return base
-    
-    # Join and resolve
     result = (base / Path(*clean_paths)).resolve()
-    
-    # Verify result is under base
     if not is_safe_path(base, result):
         raise HTTPException(
             status_code=400,
-            detail="Invalid path: access outside allowed directory"
+            detail="Invalid path: access outside allowed directory",
         )
-    
     return result
 
 

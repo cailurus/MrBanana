@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import axios from 'axios';
 import { Card, cn } from '../ui';
-import { proxyImageUrl } from '../../utils/appHelpers';
+import { proxyImageUrl, getDirectoryPath } from '../../utils/helpers';
 
 /**
  * Infer subtitle language from file path
@@ -43,14 +43,6 @@ export function ScrapeDetailModal({
     const actors = Array.isArray(it?.actors) ? it.actors : [];
     const tags = Array.isArray(it?.tags) ? it.tags : [];
 
-    // Extract directory from path
-    const getDirectoryPath = (filePath) => {
-        const s = String(filePath || '').trim();
-        if (!s) return '';
-        const lastSlash = s.lastIndexOf('/');
-        if (lastSlash <= 0) return s;
-        return s.substring(0, lastSlash);
-    };
     const fileDirectory = getDirectoryPath(it.path);
     const runtimeDisplay = it.runtime ? `${it.runtime} mins` : '';
 

@@ -9,7 +9,7 @@ import { StatusIcon as NewStatusIcon } from '../../StatusBadge';
 import { EmptyState } from '../../EmptyState';
 import { useScrapeStore } from '../../../stores/scrapeStore';
 import { clamp, extractCodeFromPath } from '../../../utils/format';
-import { getExpectedScrapeCrawlerCount } from '../../../utils/appHelpers';
+import { getExpectedScrapeCrawlerCount } from '../../../utils/helpers';
 import { computeScrapeVirtualFilePhase } from '../../../scrapeProgress';
 
 /**

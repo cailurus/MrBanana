@@ -6,6 +6,4 @@
 export * from './useAppState';
 export * from './useAnimations';
 export * from './useWebSocket';
-export * from './useDownloadConfig';
-export * from './usePlayerConfig';
 export * from './useLogViewer';

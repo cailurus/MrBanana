@@ -18,6 +18,8 @@ from mr_banana.utils.hls import DownloadCancelled
 from mr_banana.utils.config import load_config
 from mr_banana.utils.logger import logger, MatchTaskIdFilter, set_task_id, clear_task_id, LOGS_DIR
 
+from api.log_utils import read_log_file
+
 
 class DownloadManager:
     """Manages download tasks, WebSocket connections, and task history."""
@@ -299,28 +301,8 @@ class DownloadManager:
     def read_task_log(
         self, task_id: int, offset: int = 0, max_bytes: int = 65536
     ) -> dict[str, Any]:
-        """Read task log incrementally.
-
-        offset is in bytes.
-        """
-        path = self._task_log_path(task_id)
-        if not os.path.exists(path):
-            return {"exists": False, "text": "", "next_offset": 0}
-
-        try:
-            size = os.path.getsize(path)
-            safe_offset = max(0, min(int(offset or 0), size))
-            with open(path, "rb") as f:
-                f.seek(safe_offset)
-                data = f.read(max_bytes)
-            text = data.decode("utf-8", errors="replace")
-            return {
-                "exists": True,
-                "text": text,
-                "next_offset": safe_offset + len(data),
-            }
-        except Exception as e:
-            return {"exists": True, "text": f"[read log error] {e}\n", "next_offset": offset}
+        """Read task log incrementally (offset is in bytes)."""
+        return read_log_file(self._task_log_path(task_id), offset, max_bytes)
 
     def cleanup_logs(self) -> dict[str, Any]:
         """Delete download task logs on disk.

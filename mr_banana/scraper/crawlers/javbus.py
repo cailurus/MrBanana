@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote, urljoin, urlparse
 
 from mr_banana.utils.network import DEFAULT_USER_AGENT
+from ..text_utils import looks_generic_site_desc, looks_meta_plot, normalize_code, normalize_release_date
 from ..types import CrawlResult, MediaInfo
 from .base import BaseCrawler
 
@@ -54,13 +55,10 @@ class JavbusCrawler(BaseCrawler):
 
             # Best-effort validation: ensure the page looks like the requested code.
             # This avoids accepting near matches that would produce wrong titles/plots.
-            def _norm(s: str) -> str:
-                return re.sub(r"[^A-Za-z0-9]", "", (s or "").upper())
-
-            want = _norm(code)
+            want = normalize_code(code)
             if want:
                 m = re.search(r"\b[A-Za-z0-9]{2,10}-[A-Za-z0-9]{2,10}\b", html or "", flags=re.IGNORECASE)
-                if m and _norm(m.group(0)) != want:
+                if m and normalize_code(m.group(0)) != want:
                     self._emit(f"skip detail: id mismatch want={code} got={m.group(0)}")
                     return None
 
@@ -143,31 +141,13 @@ class JavbusCrawler(BaseCrawler):
                     tags.append(t)
             tags = list(dict.fromkeys(tags))
 
-            def _looks_generic_site_desc(s: str) -> bool:
-                t = (s or "").strip()
-                if not t:
-                    return True
-                bad_markers = [
-                    "番号搜磁链",
-                    "管理你的成人影片",
-                    "分享你的想法",
-                ]
-                if any(m in t for m in bad_markers):
-                    return True
-                if len(t) < 30:
-                    return True
-                return False
-
             def _looks_meta_blob_plot(s: str) -> bool:
                 t = (s or "").strip()
                 if not t:
                     return True
-                # Common JavBus pattern (Traditional Chinese):
-                # 【發行日期】YYYY-MM-DD，【長度】123分鐘，(CODE)「TITLE」...
-                if ("發行日期" in t or "发行日期" in t or "发布日期" in t) and ("長度" in t or "长度" in t or "时长" in t) and ("分鐘" in t or "分钟" in t):
+                if looks_meta_plot(t):
                     return True
                 if "(" in t and ")" in t and re.search(r"\b[A-Za-z0-9]+-[A-Za-z0-9]+\b", t):
-                    # If it looks like a header line and is short, treat as meta.
                     if len(t) < 180:
                         return True
                 return False
@@ -194,7 +174,7 @@ class JavbusCrawler(BaseCrawler):
                 meta = soup.find("meta", attrs={"name": "description"})
                 if meta and meta.get("content"):
                     cand = str(meta.get("content") or "").strip()
-                    if not _looks_generic_site_desc(cand):
+                    if not looks_generic_site_desc(cand):
                         plot = cand
 
             # JavBus sometimes only exposes a metadata line as "plot"; treat that as empty.
@@ -213,12 +193,7 @@ class JavbusCrawler(BaseCrawler):
             preview_urls = list(dict.fromkeys(preview_urls))
 
             # normalize release to yyyy-mm-dd
-            release_norm = ""
-            if release:
-                m = re.search(r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})", release)
-                if m:
-                    y, mo, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
-                    release_norm = f"{y}-{mo}-{d}"
+            release_norm = normalize_release_date(release) if release else ""
             release_norm = release_norm or release
 
             data = {
@@ -284,7 +259,7 @@ class JavbusCrawler(BaseCrawler):
                 self._emit(f"miss {code}: no search results")
                 return None
 
-            want = re.sub(r"[^A-Za-z0-9]", "", code.upper())
+            want = normalize_code(code)
             pick = None
             for a in links:
                 href = a.get("href")

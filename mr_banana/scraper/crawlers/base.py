@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from curl_cffi import requests
 
-from mr_banana.utils.network import DEFAULT_USER_AGENT, build_proxies
+from mr_banana.utils.network import DEFAULT_USER_AGENT, build_proxies, apply_curl_dns_resolve
 from ..types import CrawlResult, MediaInfo
 
 
@@ -51,6 +51,7 @@ class BaseCrawler(ABC):
     def __init__(self, cfg: Any = None, log_fn: Callable[[str], None] | None = None):
         self.cfg = cfg
         self._log = log_fn
+        self._session = requests.Session()
 
     # -- Logging --
 
@@ -81,12 +82,18 @@ class BaseCrawler(ABC):
         """Base headers. Subclasses can override to add cookies, auth, etc."""
         return {"User-Agent": DEFAULT_USER_AGENT}
 
-    def _get_text(self, url: str, *, cookies: dict[str, str] | None = None) -> str | None:
-        """GET url, return response text or None on failure."""
+    def _request(
+        self, url: str, *, cookies: dict[str, str] | None = None
+    ) -> requests.Response | None:
+        """Perform a GET request with logging, delay, DNS resolve, and proxy.
+
+        Returns the Response on HTTP 200, or None on failure / non-200 status.
+        """
         try:
             self._emit(f"GET {url}")
             self._apply_delay()
-            r = requests.get(
+            apply_curl_dns_resolve(self._session, url)
+            r = self._session.get(
                 url,
                 headers=self._headers(),
                 cookies=cookies,
@@ -98,31 +105,20 @@ class BaseCrawler(ABC):
             self._emit(f"<- {r.status_code} {url}")
             if r.status_code != 200:
                 return None
-            return r.text
+            return r
         except Exception as e:
             self._emit(f"!! request error {url}: {e}")
             return None
 
+    def _get_text(self, url: str, *, cookies: dict[str, str] | None = None) -> str | None:
+        """GET url, return response text or None on failure."""
+        r = self._request(url, cookies=cookies)
+        return r.text if r is not None else None
+
     def _get_json(self, url: str) -> dict | None:
         """GET url, return parsed JSON dict or None."""
-        try:
-            self._emit(f"GET {url}")
-            self._apply_delay()
-            r = requests.get(
-                url,
-                headers=self._headers(),
-                timeout=25,
-                verify=False,
-                impersonate="chrome",
-                proxies=self._build_proxies(),
-            )
-            self._emit(f"<- {r.status_code} {url}")
-            if r.status_code != 200:
-                return None
-            return r.json()
-        except Exception as e:
-            self._emit(f"!! request error {url}: {e}")
-            return None
+        r = self._request(url)
+        return r.json() if r is not None else None
 
     # -- Abstract --
 

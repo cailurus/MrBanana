@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote_plus, urljoin
 
 from mr_banana.utils.network import DEFAULT_USER_AGENT
+from ..text_utils import looks_placeholder_plot
 from ..types import CrawlResult, MediaInfo
 from .base import BaseCrawler
 
@@ -42,21 +43,6 @@ class DmmCrawler(BaseCrawler):
         if cookies:
             dmm_cookies.update(cookies)
         return super()._get_text(url, cookies=dmm_cookies)
-
-    def _looks_placeholder_plot(self, s: str) -> bool:
-        t = re.sub(r"\s+", " ", (s or "").strip()).lower()
-        if not t:
-            return True
-        markers = [
-            "javascriptを有効",
-            "javascriptの設定方法",
-            "無料サンプル",
-            "サンプル動画",
-            "中古品",
-            "画像をクリックして拡大",
-            "拡大サンプル画像",
-        ]
-        return any(m in t for m in markers)
 
     def crawl(self, file_path: Path, media: MediaInfo) -> CrawlResult | None:
         code = self._extract_code(file_path)
@@ -311,7 +297,7 @@ class DmmCrawler(BaseCrawler):
                 except Exception:
                     trailer_url = ""
 
-            if plot and self._looks_placeholder_plot(plot):
+            if plot and looks_placeholder_plot(plot):
                 self._emit("plot looks like JS/blocked placeholder; dropping")
                 plot = ""
 

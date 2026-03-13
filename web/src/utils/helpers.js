@@ -56,19 +56,14 @@ export function proxyImageUrl(url) {
 }
 
 /**
- * Normalize Jable input (URL or code) to full URL
- * @param {string} value - URL or code
- * @returns {string} Normalized URL
+ * Extract directory path from a full file path
+ * @param {string} filePath - Full file path
+ * @returns {string} Directory portion
  */
-export function normalizeJableInput(value) {
-    const s = String(value || '').trim();
+export function getDirectoryPath(filePath) {
+    const s = String(filePath || '').trim();
     if (!s) return '';
-    const lowered = s.toLowerCase();
-    if (lowered.includes('jable.tv')) {
-        if (lowered.startsWith('http://') || lowered.startsWith('https://')) return s;
-        return `https://${s.replace(/^\/+/, '')}`;
-    }
-    if (lowered.startsWith('http://') || lowered.startsWith('https://')) return s;
-    const code = s.replace(/\s+/g, '').toLowerCase();
-    return `https://jable.tv/videos/${code}/`;
+    const lastSlash = s.lastIndexOf('/');
+    if (lastSlash <= 0) return s;
+    return s.substring(0, lastSlash);
 }

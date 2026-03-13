@@ -8,11 +8,10 @@ import subprocess
 import platform
 import os
 
+from api.constants import VALID_VIDEO_EXTENSIONS
 from api.security import get_all_media_roots, is_path_under_roots
 
 router = APIRouter()
-
-ALLOWED_VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
 
 
 class PlayerOpenRequest(BaseModel):
@@ -27,7 +26,7 @@ async def open_with_system_player(request: PlayerOpenRequest):
 
     # Security: validate file extension is a known video type
     ext = Path(file_path).suffix.lower()
-    if ext not in ALLOWED_VIDEO_EXTS:
+    if ext not in VALID_VIDEO_EXTENSIONS:
         raise HTTPException(status_code=403, detail="File type not allowed")
 
     # Security: validate path is under configured media directories

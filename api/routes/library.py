@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import ipaddress
-import os
 import socket
+import threading
 import time as _time
 from pathlib import Path
 from urllib.parse import quote, unquote
@@ -15,12 +15,14 @@ from mr_banana.utils.config import load_config
 from mr_banana.utils.network import DEFAULT_USER_AGENT
 
 from api.async_utils import run_sync
-from api.security import get_all_media_roots, get_library_root
+from api.constants import VALID_IMAGE_EXTENSIONS, VALID_VIDEO_EXTENSIONS
+from api.security import get_all_media_roots, get_library_root, safe_join_path
 
 router = APIRouter()
 
 # Simple TTL cache for library NFO listing (avoids rglob on every API call)
 _nfo_cache: dict[str, tuple[float, list[Path]]] = {}
+_nfo_cache_lock = threading.Lock()
 _NFO_CACHE_TTL = 30.0  # seconds
 
 
@@ -28,11 +30,12 @@ def _get_cached_nfos(root: Path) -> list[Path]:
     """Return NFO files under root, cached for _NFO_CACHE_TTL seconds."""
     cache_key = str(root)
     now = _time.time()
-    cached = _nfo_cache.get(cache_key)
-    if cached is not None:
-        ts, nfos = cached
-        if now - ts < _NFO_CACHE_TTL:
-            return list(nfos)
+    with _nfo_cache_lock:
+        cached = _nfo_cache.get(cache_key)
+        if cached is not None:
+            ts, nfos = cached
+            if now - ts < _NFO_CACHE_TTL:
+                return list(nfos)
 
     nfos: list[Path] = []
     try:
@@ -42,19 +45,17 @@ def _get_cached_nfos(root: Path) -> list[Path]:
     except Exception:
         return []
 
-    _nfo_cache[cache_key] = (now, nfos)
+    with _nfo_cache_lock:
+        _nfo_cache[cache_key] = (now, nfos)
     return nfos
 
 
 
 
 def _safe_join_under_root(root: Path, rel: str) -> Path:
-    root_resolved = root.resolve()
+    """Resolve a relative path safely under *root*."""
     rel_clean = unquote(str(rel or "")).lstrip("/\\")
-    p = (root_resolved / rel_clean).resolve()
-    if not str(p).startswith(str(root_resolved) + os.sep) and p != root_resolved:
-        raise HTTPException(status_code=400, detail="Invalid path")
-    return p
+    return safe_join_path(root, rel_clean)
 
 
 def _first_text(el: ET.Element | None, path: str) -> str | None:
@@ -122,8 +123,6 @@ def _build_library_items(root: Path, max_items: int) -> list[dict]:
 
     nfos.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
 
-    video_exts = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
-
     for nfo in nfos:
         if len(items) >= max_items:
             break
@@ -136,7 +135,7 @@ def _build_library_items(root: Path, max_items: int) -> list[dict]:
             for cand in nfo.parent.iterdir():
                 if not cand.is_file():
                     continue
-                if cand.suffix.lower() not in video_exts:
+                if cand.suffix.lower() not in VALID_VIDEO_EXTENSIONS:
                     continue
                 if cand.stem == nfo.stem:
                     video_path = cand
@@ -230,7 +229,7 @@ async def get_library_file(rel: str):
         raise HTTPException(status_code=404, detail="file not found")
 
     ext = found_path.suffix.lower()
-    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+    if ext not in VALID_IMAGE_EXTENSIONS:
         raise HTTPException(status_code=403, detail="file type not allowed")
 
     media_type = {
@@ -262,8 +261,7 @@ async def stream_library_video(rel: str, request: Request):
     if p is None:
         raise HTTPException(status_code=404, detail="file not found")
 
-    video_exts = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
-    if p.suffix.lower() not in video_exts:
+    if p.suffix.lower() not in VALID_VIDEO_EXTENSIONS:
         raise HTTPException(status_code=403, detail="file type not allowed")
 
     size = p.stat().st_size

@@ -4,17 +4,7 @@
  */
 import { create } from 'zustand';
 import axios from 'axios';
-
-/**
- * Stable JSON.stringify for deep comparison
- */
-function stableStringify(obj) {
-    if (obj === null || obj === undefined) return String(obj);
-    if (typeof obj !== 'object') return JSON.stringify(obj);
-    if (Array.isArray(obj)) return '[' + obj.map(stableStringify).join(',') + ']';
-    const keys = Object.keys(obj).sort();
-    return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
-}
+import { stableStringify } from '../utils/helpers';
 
 /**
  * Clean config payload - remove legacy keys

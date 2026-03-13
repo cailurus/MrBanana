@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from curl_cffi import requests
 
 from mr_banana.utils.config import load_config
-from mr_banana.utils.network import DEFAULT_USER_AGENT, build_proxies
+from mr_banana.utils.network import DEFAULT_USER_AGENT, build_proxies, apply_curl_dns_resolve
 
 from api.async_utils import run_sync
 from api.subscription_checker import create_javdb_crawler
@@ -70,9 +70,9 @@ def normalize_code(code: str) -> str:
 
 def check_jable_availability(code: str, proxy_url: str | None = None) -> tuple[bool, str | None]:
     """Check if a video is available on Jable.tv.
-    
+
     Also checks for -c suffix variants (e.g., ssni-369-c).
-    
+
     Returns:
         Tuple of (is_available, jable_url)
     """
@@ -82,17 +82,21 @@ def check_jable_availability(code: str, proxy_url: str | None = None) -> tuple[b
         f"https://jable.tv/videos/{code_lower}/",
         f"https://jable.tv/videos/{code_lower}-c/",
     ]
-    
+
     try:
         proxies = build_proxies(proxy_url)
 
         headers = {
             "User-Agent": DEFAULT_USER_AGENT,
         }
-        
+
+        session = requests.Session()
+
         for jable_url in url_variants:
+            apply_curl_dns_resolve(session, jable_url)
+
             # Use HEAD request first to check availability (faster)
-            response = requests.head(
+            response = session.head(
                 jable_url,
                 headers=headers,
                 timeout=10,
@@ -101,14 +105,14 @@ def check_jable_availability(code: str, proxy_url: str | None = None) -> tuple[b
                 impersonate="chrome",
                 proxies=proxies,
             )
-            
+
             # If HEAD returns 200, the video exists
             if response.status_code == 200:
                 return True, jable_url
-            
+
             # Some servers don't support HEAD, try GET
             if response.status_code in (405, 403):
-                response = requests.get(
+                response = session.get(
                     jable_url,
                     headers=headers,
                     timeout=10,
@@ -121,7 +125,7 @@ def check_jable_availability(code: str, proxy_url: str | None = None) -> tuple[b
                     content = response.text[:2000] if response.text else ""
                     if "404" not in content and "找不到" not in content and "not found" not in content.lower():
                         return True, jable_url
-        
+
         return False, None
     except Exception:
         return False, None

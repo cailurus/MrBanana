@@ -6,11 +6,8 @@
 // Formatting utilities
 export * from './format';
 
-// Helper utilities
+// Helper utilities (canonical location for stableStringify, proxyImageUrl, etc.)
 export * from './helpers';
 
 // Accessibility utilities
 export * from './accessibility';
-
-// App-specific helpers
-export * from './appHelpers';

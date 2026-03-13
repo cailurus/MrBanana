@@ -10,7 +10,7 @@ import { useToast } from '../../Toast';
 import { useScrapeStore } from '../../../stores/scrapeStore';
 import { useGearAnimation, useBroomAnimation, playSettingsOpenSfx, stopSettingsOpenSfx, playBrushCleanSfx } from '../../../hooks/useAnimations';
 import { cn } from '../../ui';
-import { getExpectedScrapeCrawlerCount } from '../../../utils/appHelpers';
+import { getExpectedScrapeCrawlerCount, stableStringify } from '../../../utils/helpers';
 import { parseScrapeLogChunk } from '../../../scrapeProgress';
 
 import { ScrapeSettingsPanel } from './ScrapeSettingsPanel';
@@ -82,15 +82,6 @@ export function ScrapeTab({
     // Directory browser state for remote access
     const [showDirBrowser, setShowDirBrowser] = React.useState(false);
     const [dirBrowserTarget, setDirBrowserTarget] = React.useState(null); // 'input' or 'output'
-
-    // stableStringify for config comparison
-    const stableStringify = (obj) => {
-        if (obj === null || obj === undefined) return String(obj);
-        if (typeof obj !== 'object') return JSON.stringify(obj);
-        if (Array.isArray(obj)) return '[' + obj.map(stableStringify).join(',') + ']';
-        const keys = Object.keys(obj).sort();
-        return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
-    };
 
     // Clean config payload
     const cleanConfigPayload = (cfg) => {

@@ -5,19 +5,8 @@ import React from 'react';
 import { Card } from '../../ui';
 import { useScrapeStore } from '../../../stores/scrapeStore';
 import { clamp, extractCodeFromPath } from '../../../utils/format';
-import { getExpectedScrapeCrawlerCount, proxyImageUrl } from '../../../utils/appHelpers';
+import { getExpectedScrapeCrawlerCount, proxyImageUrl, getDirectoryPath } from '../../../utils/helpers';
 import { computeScrapeVirtualFilePhase } from '../../../scrapeProgress';
-
-/**
- * Extract directory path from full file path
- */
-function getDirectoryPath(filePath) {
-    const s = String(filePath || '').trim();
-    if (!s) return '';
-    const lastSlash = s.lastIndexOf('/');
-    if (lastSlash <= 0) return s;
-    return s.substring(0, lastSlash);
-}
 
 /**
  * Pick the best matching item from scrape items for preview

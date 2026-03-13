@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote_plus, urljoin, urlparse
 
 from mr_banana.utils.network import DEFAULT_USER_AGENT
+from ..text_utils import looks_generic_site_desc, normalize_code, normalize_release_date
 from ..types import CrawlResult, MediaInfo
 from .base import BaseCrawler
 
@@ -47,16 +48,13 @@ class JavdbCrawler(BaseCrawler):
             if not boxes:
                 return None
 
-            def norm(s: str) -> str:
-                return re.sub(r"[^A-Za-z0-9]", "", (s or "").upper())
-
-            want = norm(code)
+            want = normalize_code(code)
 
             # Prefer exact code match from the result card's UID (more reliable than title contains).
             for a in boxes:
                 uid_el = a.select_one(".uid")
                 uid_txt = uid_el.get_text(" ", strip=True) if uid_el else ""
-                if uid_txt and want and norm(uid_txt) == want:
+                if uid_txt and want and normalize_code(uid_txt) == want:
                     href = a.get("href")
                     if href:
                         return urljoin(self.cfg.base_url, href)
@@ -64,7 +62,7 @@ class JavdbCrawler(BaseCrawler):
             # Fallback: accept a title that contains the code.
             for a in boxes:
                 title = (a.get_text(" ", strip=True) or "")
-                if want and want in norm(title):
+                if want and want in normalize_code(title):
                     href = a.get("href")
                     if href:
                         return urljoin(self.cfg.base_url, href)
@@ -123,10 +121,7 @@ class JavdbCrawler(BaseCrawler):
 
         # Validate that the detail page matches the requested code.
         # JavDB search sometimes returns near matches; do not accept mismatched pages.
-        def _norm_code(s: str) -> str:
-            return re.sub(r"[^A-Za-z0-9]", "", (s or "").upper())
-
-        want = _norm_code(code)
+        want = normalize_code(code)
         page_code = ""
         try:
             raw_id = self._text_after_label(soup, ["識別碼:", "识别码:", "ID:", "品番:", "番号:", "番號:"])
@@ -135,7 +130,7 @@ class JavdbCrawler(BaseCrawler):
                 page_code = m.group(0) if m else raw_id
         except Exception:
             page_code = ""
-        if page_code and want and _norm_code(page_code) != want:
+        if page_code and want and normalize_code(page_code) != want:
             self._emit(f"skip detail: id mismatch want={code} got={page_code}")
             return None
 
@@ -189,12 +184,7 @@ class JavdbCrawler(BaseCrawler):
             rating = ""
 
         # normalize release to yyyy-mm-dd if possible
-        release_norm = ""
-        if release:
-            m = re.search(r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})", release)
-            if m:
-                y, mo, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
-                release_norm = f"{y}-{mo}-{d}"
+        release_norm = normalize_release_date(release) if release else ""
         release_norm = release_norm or release
 
         # runtime minutes
@@ -227,24 +217,6 @@ class JavdbCrawler(BaseCrawler):
         if cover_url and "/covers/" in cover_url:
             poster_url = cover_url.replace("/covers/", "/thumbs/")
 
-        def _looks_generic_site_desc(s: str) -> bool:
-            t = (s or "").strip()
-            if not t:
-                return True
-            # JavDB's generic site tagline sometimes appears as meta description.
-            # Example: "番号搜磁链，管理你的成人影片并分享你的想法"
-            bad_markers = [
-                "番号搜磁链",
-                "管理你的成人影片",
-                "分享你的想法",
-            ]
-            if any(m in t for m in bad_markers):
-                return True
-            # Very short descriptions are rarely real plot.
-            if len(t) < 30:
-                return True
-            return False
-
         # plot / description (best effort)
         plot = ""
         for lab in ["簡介", "简介", "Description", "Storyline", "剧情", "劇情"]:
@@ -264,7 +236,7 @@ class JavdbCrawler(BaseCrawler):
         # NOTE: Do NOT fall back to meta description here.
         # Many upstream sites use a generic site slogan for meta description,
         # which would pollute plot and block other sources due to merge ordering.
-        if plot and _looks_generic_site_desc(plot):
+        if plot and looks_generic_site_desc(plot):
             plot = ""
 
         # Extract magnet links

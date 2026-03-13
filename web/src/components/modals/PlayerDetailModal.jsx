@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Button, Card, cn } from '../ui';
-import { proxyImageUrl } from '../../utils/appHelpers';
+import { proxyImageUrl } from '../../utils/helpers';
 import axios from 'axios';
 
 /**

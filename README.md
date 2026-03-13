@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>🍌 Download from Jable.tv and scrape local videos with Web UI</strong>
+  <strong>Download from Jable.tv & scrape local video libraries with a Web UI</strong>
 </p>
 
 <p align="center">
@@ -18,150 +18,149 @@
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/cailurus/MrBanana/main/userscripts/mrbanana-helper.user.js"><img src="https://img.shields.io/badge/Tampermonkey-Install%20Script-00485B?style=flat-square&logo=tampermonkey&logoColor=white" alt="Install Userscript"></a>
-  <a href="#docker"><img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Ready"></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
+  <a href="#docker-recommended"><img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Ready"></a>
+  <a href="#local-development"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
+</p>
+
+<p align="center">
+  <a href="./README_CN.md">中文文档</a>
 </p>
 
 ---
 
-Download from Jable.tv and scrape local videos (generate NFO/artwork) with CLI or Web UI. Backend: FastAPI. Frontend: React/Vite.
-
 ## Features
 
-- Concurrent HLS download with Cloudflare bypass
-- Automatic segment merge (FFmpeg)
-- Web UI for batch download & history
-- Local scraper: scan folders, fetch metadata by code, write `*.nfo` + artwork
+- **Video Download** — Concurrent HLS download from Jable.tv with Cloudflare bypass, automatic segment merge via FFmpeg
+- **Metadata Scraping** — Scan local folders, fetch metadata from multiple sources (JavDB, JavBus, DMM, JavTrailers, ThePornDB), generate Kodi-compatible NFO files and artwork
+- **Web UI** — React-based interface for batch download, scraping, subscription management, and library browsing
+- **Subscription Tracking** — Monitor magnet link updates on JavDB with optional Telegram notifications
+- **CLI** — Command-line interface for scripted downloads
+- **Browser Userscripts** — Tampermonkey extensions for one-click download/subscribe on JavDB and Jable
 
-## Project layout
+## Architecture
 
 ```
-MrBanana/
-├── api/          # FastAPI backend
-├── mr_banana/    # Core library (CLI, downloader, scraper, utils)
-├── web/          # React/Vite frontend source
-├── static/       # Deployed frontend (built)
-├── data/         # Local DB (ignored)
-├── logs/         # Logs (ignored)
-└── scripts/, tests/, Dockerfile, Makefile, pyproject.toml
+Frontend (React / Vite)
+    ↓  REST /api/* + WebSocket /ws
+API Layer (FastAPI)
+    ↓
+Managers (Download / Scrape / Subscription)
+    ↓
+Core Library
+    ├── Downloader → JableExtractor → HLS
+    ├── Scraper → Crawlers (JavDB, JavBus, DMM, ...) → NFO Writer
+    └── Utils (config, history, network, browser, translate)
 ```
 
-## Quick start
-
-```bash
-git clone https://github.com/cailurus/MrBanana.git
-cd MrBanana
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-make py-install
-make web-install
-```
-
-### Run (live dev)
-
-```bash
-make dev  # starts FastAPI on 8000 + Vite on 5173 with HMR
-```
-- Frontend: http://localhost:5173
-- Backend:  http://127.0.0.1:8000
-
-### Build & serve (single port)
-
-```bash
-make fe     # build frontend and copy to ./static
-make serve  # FastAPI serves ./static on 8000
-```
-
-`make fe` vs `make dev`: `fe` builds static assets for production/serve; `dev` runs both servers with hot reload and no static copy.
-
-### Docker
-
-```bash
-make docker-build IMAGE=yourname/mr-banana TAG=latest
-make docker-run   IMAGE=yourname/mr-banana TAG=latest
-```
-
-## CLI usage
-
-```bash
-python -m mr_banana.cli --url <VIDEO_URL> --output_dir <OUT_DIR>
-```
-Common flags:
-- `--url` (required): Jable.tv video URL
-- `--output_dir`: output folder
-- `--format`: filename format, supports `{id}` and `{title}`
-- `-v/--verbose`: verbose logging
-
-## Requirements
-
-- Python 3.10+
-- FFmpeg (merge segments)
-- patchright + Chromium (Cloudflare bypass; `patchright install chromium` on first run)
-
-## Environment variables
-
-| Name | Description | Default |
-|------|-------------|---------|
-| `LOG_LEVEL` | Log level | `INFO` |
-| `MR_BANANA_LOG_LEVEL` | Overrides log level | `INFO` |
-| `ALLOWED_BROWSE_ROOTS` | Comma-separated paths for remote directory browsing | `/data` |
-
-## Docker volume mounts
-
-When running in Docker, map your host directories into the container. The syntax is `host_path:container_path`.
-
-### Persistent storage
-
-The container uses two main directories:
-
-| Container path | Description | Recommended host path |
-|----------------|-------------|----------------------|
-| `/config` | Config file, database, logs (persisted) | `/volume/mrbanana/config` |
-| `/data` | Media files (videos, downloads) | `/volume/data` |
-
-**Important**: Mount `/config` to preserve your settings, subscription database, and logs across container updates.
-
-### Example: Recommended setup
+## Docker (Recommended)
 
 ```bash
 docker run -d \
   --name mr-banana \
   -p 8000:8000 \
-  -v /volume/mrbanana/config:/config \
-  -v /volume/data:/data \
+  -v /your/config:/config \
+  -v /your/media:/data \
   -e ALLOWED_BROWSE_ROOTS="/data" \
   cailurus/mr-banana:latest
 ```
 
-| Host path | Container path | Description |
-|-----------|----------------|-------------|
-| `/volume/mrbanana/config` | `/config` | Config, database, logs |
-| `/volume/data` | `/data` | Your media directory |
+Open http://localhost:8000 in your browser.
 
-Contents saved in `/config`:
-- `config.json` - Application settings
-- `mr_banana_subscription.db` - Subscription database
-- `logs/` - Application logs
+### Volume Mounts
 
-The `ALLOWED_BROWSE_ROOTS` environment variable controls which directories users can browse via the web UI when accessing remotely.
+| Container Path | Description | Example Host Path |
+|----------------|-------------|-------------------|
+| `/config` | Config, database, logs (persisted across updates) | `/volume/mrbanana/config` |
+| `/data` | Media files (videos, downloads) | `/volume/data` |
+
+Files stored in `/config`:
+- `config.json` — Application settings
+- `mr_banana_subscription.db` — Subscription database
+- `logs/` — Application logs
+
+### Docker Compose
+
+```yaml
+services:
+  mr-banana:
+    image: cailurus/mr-banana:latest
+    container_name: mr-banana
+    ports:
+      - "8000:8000"
+    volumes:
+      - /your/config:/config
+      - /your/media:/data
+    environment:
+      - ALLOWED_BROWSE_ROOTS=/data
+    restart: unless-stopped
+```
+
+## Local Development
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- FFmpeg
+- patchright + Chromium (`patchright install chromium` on first run)
+
+### Setup
+
+```bash
+git clone https://github.com/cailurus/MrBanana.git
+cd MrBanana
+python3 -m venv .venv && source .venv/bin/activate
+make py-install    # Install Python dependencies
+make web-install   # Install Node dependencies
+```
+
+### Development
+
+```bash
+make dev           # FastAPI :8000 + Vite :5173 with hot reload
+make test          # Run tests
+make test-quick    # Run tests (quiet output)
+```
+
+### Production Build
+
+```bash
+make fe            # Build frontend → ./static
+make serve         # FastAPI serves ./static on :8000
+```
+
+## CLI Usage
+
+```bash
+python -m mr_banana.cli --url <VIDEO_URL> --output_dir <OUT_DIR>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--url` | Jable.tv video URL (required) |
+| `--output_dir` | Output folder |
+| `--format` | Filename format — supports `{id}` and `{title}` |
+| `-v` | Verbose logging |
 
 ## Browser Userscript
 
-Install the userscript to add quick buttons on JavDB and Jable websites:
+1. Install [Tampermonkey](https://www.tampermonkey.net/)
+2. Click to install: [mrbanana-helper.user.js](https://raw.githubusercontent.com/cailurus/MrBanana/main/userscripts/mrbanana-helper.user.js)
+3. Configure your Mr. Banana server address in Tampermonkey settings
 
-### Installation
+**Supported sites:**
+- **JavDB** — "Subscribe to Mr. Banana" button on detail pages
+- **Jable** — "Download to Mr. Banana" button on video pages
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/) (Chrome/Firefox/Edge/Safari)
-2. **Important**: Enable user scripts in Tampermonkey settings:
-   - Click Tampermonkey icon → Dashboard → Settings tab
-   - Find "Security" section → Enable "Allow User Scripts"
-3. Click to install: [mrbanana-helper.user.js](https://raw.githubusercontent.com/cailurus/MrBanana/main/userscripts/mrbanana-helper.user.js)
-4. Configure your Mr. Banana server address (click Tampermonkey icon → ⚙️ Mr. Banana 设置)
+## Environment Variables
 
-### Features
-
-- **JavDB**: Adds "Subscribe to Mr. Banana" button on video detail pages
-- **Jable**: Adds "Download to Mr. Banana" button on video pages
+| Name | Description | Default |
+|------|-------------|---------|
+| `LOG_LEVEL` | Log level | `INFO` |
+| `MR_BANANA_LOG_LEVEL` | Override log level | `INFO` |
+| `MR_BANANA_CONFIG_DIR` | Config directory | `/config` (Docker) |
+| `ALLOWED_BROWSE_ROOTS` | Directories browsable in Web UI | `/data` |
+| `CORS_ORIGINS` | CORS allowed origins | `*` |
 
 ## License
 
