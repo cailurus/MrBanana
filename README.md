@@ -5,21 +5,15 @@
 </p>
 
 <p align="center">
-  <strong>Download from Jable.tv & scrape local video libraries with a Web UI</strong>
+  <strong>Jable.tv Video Downloader & JAV Library Manager with Web UI</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/cailurus/MrBanana/releases"><img src="https://img.shields.io/github/v/release/cailurus/MrBanana?style=flat-square&color=blue" alt="GitHub Release"></a>
   <a href="https://github.com/cailurus/MrBanana/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cailurus/MrBanana?style=flat-square" alt="License"></a>
   <a href="https://hub.docker.com/r/cailurus/mr-banana"><img src="https://img.shields.io/docker/pulls/cailurus/mr-banana?style=flat-square&logo=docker&logoColor=white" alt="Docker Pulls"></a>
-  <a href="https://hub.docker.com/r/cailurus/mr-banana"><img src="https://img.shields.io/docker/image-size/cailurus/mr-banana/latest?style=flat-square&logo=docker&logoColor=white&label=image%20size" alt="Docker Image Size"></a>
+  <a href="#quick-start-windows"><img src="https://img.shields.io/badge/Windows-PS%20Script-0078D6?style=flat-square&logo=powershell&logoColor=white" alt="Windows"></a>
   <a href="https://github.com/cailurus/MrBanana/stargazers"><img src="https://img.shields.io/github/stars/cailurus/MrBanana?style=flat-square&color=yellow" alt="GitHub Stars"></a>
-</p>
-
-<p align="center">
-  <a href="https://raw.githubusercontent.com/cailurus/MrBanana/main/userscripts/mrbanana-helper.user.js"><img src="https://img.shields.io/badge/Tampermonkey-Install%20Script-00485B?style=flat-square&logo=tampermonkey&logoColor=white" alt="Install Userscript"></a>
-  <a href="#docker-recommended"><img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Ready"></a>
-  <a href="#local-development"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
 </p>
 
 <p align="center">
@@ -30,27 +24,27 @@
 
 ## Features
 
-- **Video Download** — Concurrent HLS download from Jable.tv with Cloudflare bypass, automatic segment merge via FFmpeg
-- **Metadata Scraping** — Scan local folders, fetch metadata from multiple sources (JavDB, JavBus, DMM, JavTrailers, ThePornDB), generate Kodi-compatible NFO files and artwork
-- **Web UI** — React-based interface for batch download, scraping, subscription management, and library browsing
-- **Subscription Tracking** — Monitor magnet link updates on JavDB with optional Telegram notifications
-- **CLI** — Command-line interface for scripted downloads
-- **Browser Userscripts** — Tampermonkey extensions for one-click download/subscribe on JavDB and Jable
+- **⚡ High-Speed Download** — Concurrent HLS download from Jable.tv, auto bypass Cloudflare via cookie injection (no browser needed), FFmpeg segment merge
+- **📚 Batch Download** — Submit a jable.tv list page URL (favorites / watch-later) and enqueue all videos at once
+- **🏷️ Metadata Scraping** — Scan local folders, fetch metadata from JavDB, JavBus, DMM, JavTrailers, ThePornDB; generate Kodi-compatible NFO and artwork
+- **🖥️ Web UI** — React-based interface with download queue, scraping, subscription management, and media library browser
+- **🔔 Subscription Tracking** — Monitor magnet link updates on JavDB with Telegram notifications
+- **📡 Userscripts** — Tampermonkey extensions for one-click download/subscribe on JavDB and Jable
+- **⏸️ Pause & Resume** — Cancel mid-download and resume later without re-downloading completed segments
+- **🔐 Cloudflare Bypass** — Auto-extract cookies from your logged-in Chrome session; skip Chromium on subsequent downloads
 
-## Architecture
+## Quick Start (Windows)
 
+```powershell
+.\run.ps1
 ```
-Frontend (React / Vite)
-    ↓  REST /api/* + WebSocket /ws
-API Layer (FastAPI)
-    ↓
-Managers (Download / Scrape / Subscription)
-    ↓
-Core Library
-    ├── Downloader → JableExtractor → HLS
-    ├── Scraper → Crawlers (JavDB, JavBus, DMM, ...) → NFO Writer
-    └── Utils (config, history, network, browser, translate)
-```
+
+1. Auto-launches Chrome with CDP debugging for cookie extraction
+2. Opens jable.tv login page — log in and press any key
+3. Automatically extracts cookies → saves to config → starts server
+4. Open http://127.0.0.1:8000
+
+No manual `.venv` activation needed.
 
 ## Docker (Recommended)
 
@@ -64,19 +58,9 @@ docker run -d \
   cailurus/mr-banana:latest
 ```
 
-Open http://localhost:8000 in your browser.
+Open http://localhost:8000
 
-### Volume Mounts
-
-| Container Path | Description | Example Host Path |
-|----------------|-------------|-------------------|
-| `/config` | Config, database, logs (persisted across updates) | `/volume/mrbanana/config` |
-| `/data` | Media files (videos, downloads) | `/volume/data` |
-
-Files stored in `/config`:
-- `config.json` — Application settings
-- `mr_banana_subscription.db` — Subscription database
-- `logs/` — Application logs
+> **Note:** The Docker image uses Patchright (Chromium) for initial Cloudflare bypass. After adding your jable.tv cookie in Web UI → Download Settings, downloads will use the fast cookie-direct mode.
 
 ### Docker Compose
 
@@ -95,6 +79,30 @@ services:
     restart: unless-stopped
 ```
 
+### Volume Mounts
+
+| Container Path | Description | Example Host Path |
+|----------------|-------------|-------------------|
+| `/config` | Config, database, logs (persisted) | `/volume/mrbanana/config` |
+| `/data` | Media files (videos, downloads) | `/volume/data` |
+
+`/config` contains: `config.json`, `mr_banana_subscription.db`, `logs/`
+
+## Architecture
+
+```
+Frontend (React / Vite)
+    ↓  REST /api/* + WebSocket /ws
+API Layer (FastAPI)
+    ↓
+Managers (Download / Scrape / Subscription)
+    ↓
+Core Library
+    ├── Downloader → JableExtractor → HLS (curl_cffi or Patchright)
+    ├── Scraper → Crawlers (JavDB, JavBus, DMM, ...) → NFO Writer
+    └── Utils (config, history, network, browser, translate)
+```
+
 ## Local Development
 
 ### Prerequisites
@@ -102,24 +110,24 @@ services:
 - Python 3.10+
 - Node.js 18+
 - FFmpeg
-- patchright + Chromium (`patchright install chromium` on first run)
+- (optional) Chrome for CDP cookie extraction
 
 ### Setup
 
 ```bash
 git clone https://github.com/cailurus/MrBanana.git
 cd MrBanana
-python3 -m venv .venv && source .venv/bin/activate
-make py-install    # Install Python dependencies
-make web-install   # Install Node dependencies
+python -m venv .venv && .venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+cd web && npm install && cd ..
 ```
 
 ### Development
 
 ```bash
 make dev           # FastAPI :8000 + Vite :5173 with hot reload
-make test          # Run tests
-make test-quick    # Run tests (quiet output)
+# or
+python run.ps1     # Single window: builds frontend + starts FastAPI
 ```
 
 ### Production Build
@@ -142,6 +150,15 @@ python -m mr_banana.cli --url <VIDEO_URL> --output_dir <OUT_DIR>
 | `--format` | Filename format — supports `{id}` and `{title}` |
 | `-v` | Verbose logging |
 
+## API Endpoints (New)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/download/batch` | Enqueue all videos from a jable.tv list page |
+| `GET` | `/api/download/batch/preview` | Preview videos on a jable.tv list page |
+| `GET` | `/api/jable/lists` | Fetch your liked and watch-later lists (CDP pagination) |
+| `POST` | `/api/jable/login` | Login via CDP cookie extraction or manual browser |
+
 ## Browser Userscript
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
@@ -151,6 +168,20 @@ python -m mr_banana.cli --url <VIDEO_URL> --output_dir <OUT_DIR>
 **Supported sites:**
 - **JavDB** — "Subscribe to Mr. Banana" button on detail pages
 - **Jable** — "Download to Mr. Banana" button on video pages
+
+## Cookie Management
+
+Mr. Banana can extract Cloudflare bypass cookies from your existing Chrome login session:
+
+```bash
+# Method 1: Auto-extract via CDP (requires Chrome running on port 9222)
+python scripts/mcp_cdp_cookie_server.py
+
+# Method 2: Browser console
+# Open jable.tv → F12 → Console → paste scripts/extract_jable_cookie.js → Enter
+```
+
+Paste the cookie string into **Web UI → Download Settings → Jable Cookie**. Subsequent downloads will use the fast cookie-direct mode (no browser launch).
 
 ## Environment Variables
 
