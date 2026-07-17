@@ -15,7 +15,7 @@ from mr_banana.downloader import MovieDownloader, normalize_jable_input
 from mr_banana.utils.network import build_proxies
 from mr_banana.utils.history import HistoryManager
 from mr_banana.utils.hls import DownloadCancelled
-from mr_banana.utils.config import load_config
+from mr_banana.utils.config import load_config, AppConfig
 from mr_banana.utils.logger import logger, MatchTaskIdFilter, set_task_id, clear_task_id, LOGS_DIR
 
 from api.log_utils import read_log_file
@@ -38,6 +38,41 @@ class DownloadManager:
         self.history_manager.mark_incomplete_as_paused()
         self._downloader: MovieDownloader | None = None
         self._downloader_key: tuple[int, str] | None = None
+        self.max_concurrent_downloads: int = 3
+        self._download_queue: list[str] = []  # queued task_id strings
+
+    def _count_active_downloads(self) -> int:
+        """Count tasks currently in Preparing or Downloading state."""
+        with self._tasks_lock:
+            return sum(
+                1 for t in self.active_tasks.values()
+                if t.get("status") in ("Preparing", "Downloading")
+            )
+
+    def _dispatch_next_queued(self) -> None:
+        """When a download finishes, start the next queued task if any."""
+        with self._tasks_lock:
+            while self._download_queue:
+                next_id = self._download_queue.pop(0)
+                if next_id not in self.active_tasks:
+                    continue
+                task = self.active_tasks[next_id]
+                if task.get("status") != "Queued":
+                    continue
+                task["status"] = "Preparing"
+                task_id = task["id"]
+                url_val = task["url"]
+                cfg = load_config()
+                output_dir_val = cfg.output_dir or ""
+                scrape_val = bool(task.get("scrape_after_download"))
+                self._cancel_events[next_id] = threading.Event()
+                thread = threading.Thread(
+                    target=self._download_worker,
+                    args=(task_id, url_val, output_dir_val, scrape_val),
+                )
+                thread.daemon = True
+                thread.start()
+                break
 
     def get_active_tasks_snapshot(self) -> dict[str, dict[str, Any]]:
         """Return a thread-safe deep copy of active_tasks."""
@@ -45,11 +80,11 @@ class DownloadManager:
             return copy.deepcopy(self.active_tasks)
 
     def _get_downloader(
-        self, *, max_workers: int, proxies: dict[str, str] | None
+        self, *, max_workers: int, proxies: dict[str, str] | None, cookies: dict[str, str] | None
     ) -> MovieDownloader:
-        key = (int(max_workers), json.dumps(proxies or {}, sort_keys=True))
+        key = (int(max_workers), json.dumps(proxies or {}, sort_keys=True), json.dumps(cookies or {}, sort_keys=True))
         if self._downloader is None or self._downloader_key != key:
-            self._downloader = MovieDownloader(max_workers=int(max_workers), proxies=proxies)
+            self._downloader = MovieDownloader(max_workers=int(max_workers), proxies=proxies, cookies=cookies)
             self._downloader_key = key
         return self._downloader
 
@@ -99,6 +134,87 @@ class DownloadManager:
                     if connection in self.active_connections:
                         self.active_connections.remove(connection)
 
+    def start_batch_download(
+        self,
+        list_url: str,
+        output_dir: str,
+        *,
+        scrape_after_download: bool = False,
+    ) -> dict[str, Any]:
+        """Parse a jable.tv list page and enqueue all video downloads.
+
+        The list page is fetched immediately (sync, on the calling thread).
+        Individual video downloads are then started via separate start_download calls.
+        """
+        from mr_banana.utils.network import NetworkHandler
+        from mr_banana.extractors.jable import JableExtractor
+        from mr_banana.utils.config import load_config, AppConfig
+
+        cfg = load_config()
+        jable_cookies = AppConfig.parse_cookie_string(cfg.jable_cookie) if cfg.jable_cookie else None
+        nh = NetworkHandler(cookies=jable_cookies)
+        extractor = JableExtractor(nh)
+
+        use_browser = not bool(jable_cookies)
+        page_html = nh.get(list_url, use_browser=use_browser)
+        if not page_html:
+            return {"status": "error", "message": "Failed to fetch list page"}
+
+        items = JableExtractor.extract_grid_thumbnails(page_html, base_url=list_url)
+        if not items:
+            return {"status": "error", "message": "No video items found on the list page"}
+
+        task_ids: list[int] = []
+        skipped: list[str] = []
+        for item in items:
+            video_url = item.get("url")
+            if not video_url:
+                skipped.append(item.get("code", "unknown"))
+                continue
+
+            with self._tasks_lock:
+                if any(t.get("url") == video_url and t.get("status") not in ("Completed", "Failed") for t in self.active_tasks.values()):
+                    skipped.append(item.get("code", video_url))
+                    continue
+
+            task_id = self.history_manager.add_task(
+                video_url, status="Preparing", scrape_after_download=bool(scrape_after_download)
+            )
+            self._ensure_task_log_handler(task_id)
+
+            task_id_str = str(task_id)
+            task_info: dict[str, Any] = {
+                "id": task_id,
+                "url": video_url,
+                "status": "Preparing",
+                "progress": 0,
+                "speed": "0 B/s",
+                "total_bytes": 0,
+                "error": None,
+                "scrape_after_download": bool(scrape_after_download),
+                "scrape_job_id": None,
+                "scrape_status": "Pending" if scrape_after_download else None,
+            }
+            with self._tasks_lock:
+                self.active_tasks[task_id_str] = task_info
+                self._cancel_events[task_id_str] = threading.Event()
+
+            thread = threading.Thread(
+                target=self._download_worker,
+                args=(task_id, video_url, output_dir, bool(scrape_after_download))
+            )
+            thread.daemon = True
+            thread.start()
+            task_ids.append(task_id)
+
+        return {
+            "status": "success",
+            "total": len(items),
+            "enqueued": len(task_ids),
+            "skipped": skipped,
+            "task_ids": task_ids,
+        }
+
     def start_download(
         self,
         url: str,
@@ -106,17 +222,48 @@ class DownloadManager:
         *,
         scrape_after_download: bool = False,
     ) -> dict[str, Any]:
-        """启动下载任务（在独立线程中）"""
+        """启动下载任务（在独立线程中，受 max_concurrent_downloads 限制）"""
         normalized_url, _ = normalize_jable_input(url)
-        # active_tasks 的 key 是 task_id，这里按 URL 检查是否已有活动任务
+        task_id_str: str | None = None
+
         with self._tasks_lock:
-            if any(t.get("url") == normalized_url and t.get("status") not in ("Completed", "Failed") for t in self.active_tasks.values()):
+            if any(t.get("url") == normalized_url and t.get("status") not in ("Completed", "Failed", "Queued") for t in self.active_tasks.values()):
                 return {"status": "error", "message": "Task already exists"}
 
-        # 创建任务记录
+            # Check concurrent limit
+            active_count = sum(
+                1 for t in self.active_tasks.values()
+                if t.get("status") in ("Preparing", "Downloading")
+            )
+
+            if active_count >= self.max_concurrent_downloads:
+                # Queue the task instead of starting immediately
+                task_id = self.history_manager.add_task(
+                    normalized_url, status="Queued", scrape_after_download=bool(scrape_after_download)
+                )
+                self._ensure_task_log_handler(task_id)
+                task_id_str = str(task_id)
+                task_info: dict[str, Any] = {
+                    "id": task_id,
+                    "url": normalized_url,
+                    "status": "Queued",
+                    "progress": 0,
+                    "speed": "0 B/s",
+                    "total_bytes": 0,
+                    "error": None,
+                    "scrape_after_download": bool(scrape_after_download),
+                    "scrape_job_id": None,
+                    "scrape_status": "Pending" if scrape_after_download else None,
+                }
+                self.active_tasks[task_id_str] = task_info
+                self._download_queue.append(task_id_str)
+                return {"status": "success", "task_id": task_id, "queued": True}
+
+        # 创建任务记录并立即启动
         task_id = self.history_manager.add_task(normalized_url, status="Preparing", scrape_after_download=bool(scrape_after_download))
 
         self._ensure_task_log_handler(task_id)
+        task_id_str = str(task_id)
 
         task_info: dict[str, Any] = {
             "id": task_id,
@@ -495,8 +642,11 @@ class DownloadManager:
             use_proxy = bool(cfg.download_use_proxy)
             proxy_url = (cfg.download_proxy_url or "").strip()
             proxies = build_proxies(proxy_url) if use_proxy else None
+
+            # Parse jable cookie from config for Cloudflare bypass
+            jable_cookies = AppConfig.parse_cookie_string(cfg.jable_cookie) if cfg.jable_cookie else None
             
-            output_path = self._get_downloader(max_workers=max_workers, proxies=proxies).download(
+            output_path = self._get_downloader(max_workers=max_workers, proxies=proxies, cookies=jable_cookies).download(
                 url=url,
                 output_dir=output_dir,
                 progress_callback=progress_callback,
@@ -596,6 +746,8 @@ class DownloadManager:
             # 释放 cancel event
             self._cancel_events.pop(task_id_str, None)
             clear_task_id()
+            # Start next queued task if any
+            self._dispatch_next_queued()
         
         # 任务完成后保留一会儿状态，然后清理（可选）
         # time.sleep(60)

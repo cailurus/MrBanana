@@ -30,6 +30,22 @@ class DownloadRequest(BaseModel):
         raise ValueError('Invalid URL format')
 
 
+class BatchDownloadRequest(BaseModel):
+    list_url: str = Field(..., min_length=1, max_length=MAX_URL_LENGTH)
+    output_dir: str = Field(default="", max_length=MAX_PATH_LENGTH)
+    scrape_after_download: bool = False
+
+    @field_validator('list_url')
+    @classmethod
+    def validate_list_url(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('List URL cannot be empty')
+        if not v.startswith(('http://', 'https://')):
+            raise ValueError('Must be a valid HTTP/HTTPS URL')
+        return v
+
+
 class DownloadConfigRequest(BaseModel):
     output_dir: str | None = Field(default=None, max_length=MAX_PATH_LENGTH)
     max_download_workers: int | None = Field(default=None, ge=1, le=128)
@@ -38,6 +54,7 @@ class DownloadConfigRequest(BaseModel):
     download_proxy_url: str | None = Field(default=None, max_length=MAX_PROXY_URL_LENGTH)
     download_resolution: str | None = None
     download_scrape_after_default: bool | None = None
+    jable_cookie: str | None = Field(default=None, max_length=4096)
 
 
 class ResumeRequest(BaseModel):

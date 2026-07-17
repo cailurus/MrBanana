@@ -16,6 +16,7 @@ from api.routes.subscription import router as subscription_router
 from api.routes.system import router as system_router
 from api.routes.version import router as version_router
 from api.routes.ws import router as ws_router
+from api.routes.jable import router as jable_router
 from api.constants import API_VERSION
 from api.dependencies import get_scheduler
 
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(system_router, tags=["system"])
     app.include_router(version_router, tags=["version"])
     app.include_router(ws_router, tags=["websocket"])
+    app.include_router(jable_router, tags=["jable"])
 
     # --- Static Files (Frontend) ---
     # Must be mounted after API routes as a fallback for SPA.

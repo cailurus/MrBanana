@@ -16,6 +16,7 @@ const DEFAULT_CONFIG = {
     resolution: 'best',
     workers: 16,
     filenameFormat: '{id}',
+    jableCookie: '',
 };
 
 /**
@@ -75,6 +76,7 @@ export const useDownloadStore = create((set, get) => ({
                     resolution: typeof cfg.download_resolution === 'string' ? cfg.download_resolution || 'best' : 'best',
                     workers: typeof cfg.max_download_workers === 'number' ? Math.max(1, Math.min(128, cfg.max_download_workers)) : 16,
                     filenameFormat: typeof cfg.filename_format === 'string' ? cfg.filename_format || '{id}' : '{id}',
+                    jableCookie: typeof cfg.jable_cookie === 'string' ? cfg.jable_cookie || '' : '',
                 },
                 configReady: true,
             });
@@ -101,6 +103,7 @@ export const useDownloadStore = create((set, get) => ({
                 download_resolution: String(config.resolution || 'best'),
                 max_download_workers: Number(config.workers || 16),
                 filename_format: String(config.filenameFormat || '{id}'),
+                jable_cookie: String(config.jableCookie || ''),
             });
         } catch (err) {
             console.error('Failed to save download config', err);

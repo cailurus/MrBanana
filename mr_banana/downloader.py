@@ -46,8 +46,8 @@ def normalize_jable_input(url_or_code: str) -> tuple[str, str | None]:
 class MovieDownloader:
     """Jable.tv 视频下载器"""
 
-    def __init__(self, max_workers: int = 16, proxies: Optional[dict] = None):
-        self.network_handler = NetworkHandler(proxies=proxies)
+    def __init__(self, max_workers: int = 16, proxies: Optional[dict] = None, cookies: Optional[dict] = None):
+        self.network_handler = NetworkHandler(proxies=proxies, cookies=cookies)
         self.extractor = JableExtractor(self.network_handler)
         self.hls_downloader = HLSDownloader(self.network_handler, max_workers=max_workers)
 

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from api.dependencies import get_download_manager
 from api.manager import DownloadManager
 from api.schemas import (
+    BatchDownloadRequest,
     DownloadConfigRequest,
     DownloadRequest,
     ResumeRequest,
@@ -35,6 +36,7 @@ async def get_download_config():
         "download_proxy_url": cfg.download_proxy_url or "",
         "download_resolution": cfg.download_resolution or "best",
         "download_scrape_after_default": bool(cfg.download_scrape_after_default),
+        "jable_cookie": cfg.jable_cookie or "",
     }
 
 
@@ -64,6 +66,8 @@ async def save_download_config(request: DownloadConfigRequest):
         cfg.download_resolution = res
     if request.download_scrape_after_default is not None:
         cfg.download_scrape_after_default = bool(request.download_scrape_after_default)
+    if request.jable_cookie is not None:
+        cfg.jable_cookie = str(request.jable_cookie)
 
     save_config(cfg)
     return await get_download_config()
@@ -172,3 +176,59 @@ async def clear_download_history(
     if res.get("status") == "error":
         raise HTTPException(status_code=409, detail=res.get("message") or "failed")
     return res
+
+
+@router.post("/api/download/batch")
+async def start_batch_download(
+    request: BatchDownloadRequest,
+    manager: DownloadManager = Depends(get_download_manager),
+):
+    """Parse a jable.tv list page (e.g. /my/favorites/) and enqueue all video downloads."""
+    output_dir = str(request.output_dir).strip()
+    if not output_dir:
+        raise HTTPException(status_code=400, detail="output_dir is required")
+    validate_path_no_traversal(output_dir)
+
+    if not os.path.exists(output_dir):
+        try:
+            os.makedirs(output_dir)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to create directory: {e}")
+
+    result = manager.start_batch_download(
+        list_url=request.list_url,
+        output_dir=output_dir,
+        scrape_after_download=bool(request.scrape_after_download),
+    )
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@router.get("/api/download/batch/preview")
+async def preview_batch_download(
+    url: str = Query(..., description="jable.tv list page URL to preview"),
+):
+    """Preview items found on a jable.tv list page without starting downloads."""
+    from mr_banana.utils.network import NetworkHandler
+    from mr_banana.extractors.jable import JableExtractor
+    from mr_banana.utils.config import load_config, AppConfig
+
+    cfg = load_config()
+    jable_cookies = AppConfig.parse_cookie_string(cfg.jable_cookie) if cfg.jable_cookie else None
+    nh = NetworkHandler(cookies=jable_cookies)
+    extractor = JableExtractor(nh)
+
+    # Fetch the list page (use browser if no cookies, curl_cffi if cookies present)
+    use_browser = not bool(jable_cookies)
+    page_html = nh.get(url, use_browser=use_browser)
+    if not page_html:
+        raise HTTPException(status_code=500, detail="Failed to fetch list page")
+
+    items = JableExtractor.extract_grid_thumbnails(page_html, base_url=url)
+    return {
+        "status": "success",
+        "list_url": url,
+        "count": len(items),
+        "items": items,
+    }

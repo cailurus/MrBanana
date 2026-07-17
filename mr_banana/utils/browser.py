@@ -13,9 +13,10 @@ class BrowserManager:
 
     _chromium_checked: bool = False  # Class-level: only run install once per process
 
-    def __init__(self, headless: bool = True, proxy_url: str | None = None):
+    def __init__(self, headless: bool = True, proxy_url: str | None = None, cookies: dict[str, str] | None = None):
         self.headless = headless
         self.proxy_url = (proxy_url or "").strip() or None
+        self.cookies = cookies or {}
         self._ensure_patchright_chromium_installed()
 
     def _ensure_patchright_chromium_installed(self):
@@ -43,7 +44,7 @@ class BrowserManager:
 
         with sync_playwright() as p:
             browser = self._launch_browser(p)
-            context = self._create_context(browser)
+            context = self._create_context(browser, url)
             page = context.new_page()
 
             try:
@@ -83,9 +84,9 @@ class BrowserManager:
             **launch_kwargs,
         )
 
-    def _create_context(self, browser: Browser) -> BrowserContext:
+    def _create_context(self, browser: Browser, url: str = "") -> BrowserContext:
         """创建浏览器上下文"""
-        return browser.new_context(
+        context = browser.new_context(
             viewport={"width": 1920, "height": 1080},
             locale="en-US",
             timezone_id="America/New_York",
@@ -93,6 +94,36 @@ class BrowserManager:
             # Use same Chrome version as WINDOWS_USER_AGENT in network.py
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         )
+        # Inject cookies from config (e.g., cf_clearance for Cloudflare bypass)
+        if self.cookies:
+            # Extract domain from URL for cookie scoping
+            domain = ""
+            if url:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(url)
+                    domain = parsed.netloc  # e.g., "jable.tv" or "www.jable.tv"
+                except Exception:
+                    pass
+
+            cookie_list = []
+            for name, value in self.cookies.items():
+                cookie_list.append({
+                    "name": name,
+                    "value": value,
+                    "domain": domain if domain else None,
+                    "path": "/",
+                    "httpOnly": False,
+                    "secure": True,
+                    "sameSite": "Lax",
+                })
+            if cookie_list:
+                try:
+                    context.add_cookies(cookie_list)
+                    logger.info(f"Injected {len(cookie_list)} cookie(s) into browser context (domain={domain})")
+                except Exception as e:
+                    logger.warning(f"Failed to inject cookies: {e}")
+        return context
 
     def _process_page(self, page: Page, url: str) -> str:
         """处理页面并返回内容"""

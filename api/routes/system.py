@@ -21,8 +21,21 @@ def _get_allowed_roots() -> List[str]:
     """Get allowed root directories for remote browsing."""
     global _ALLOWED_BROWSE_ROOTS
     if not _ALLOWED_BROWSE_ROOTS:
-        env_roots = os.environ.get("ALLOWED_BROWSE_ROOTS", "/data")
-        _ALLOWED_BROWSE_ROOTS = [r.strip() for r in env_roots.split(",") if r.strip()]
+        if os.name == "nt":
+            # Windows: auto-detect available drives (C:\, D:\, etc.)
+            import string
+            _ALLOWED_BROWSE_ROOTS = []
+            for letter in string.ascii_uppercase:
+                drive = f"{letter}:\\"
+                if os.path.exists(drive):
+                    _ALLOWED_BROWSE_ROOTS.append(drive)
+            # Falls back to env var or C:\ if no drives detected
+            if not _ALLOWED_BROWSE_ROOTS:
+                env_roots = os.environ.get("ALLOWED_BROWSE_ROOTS", "C:\\")
+                _ALLOWED_BROWSE_ROOTS = [r.strip() for r in env_roots.split(",") if r.strip()]
+        else:
+            env_roots = os.environ.get("ALLOWED_BROWSE_ROOTS", "/data")
+            _ALLOWED_BROWSE_ROOTS = [r.strip() for r in env_roots.split(",") if r.strip()]
     return _ALLOWED_BROWSE_ROOTS
 
 def _is_path_allowed(path: str) -> bool:

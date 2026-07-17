@@ -25,8 +25,23 @@ class JableExtractor(BaseExtractor):
         """
         logger.info(f"Extracting video info from {url}")
 
-        # Jable 使用 Cloudflare，需要使用浏览器获取内容
-        page_html = self.network.get(url, use_browser=True)
+        page_html: str | None = None
+
+        # Try curl_cffi direct mode first if cookies are available (fast, no browser)
+        if self.network.cookies:
+            logger.info("Cookies detected, trying direct curl_cffi mode (no browser)...")
+            page_html = self.network.get(url, use_browser=False)
+            if page_html and self._get_m3u8_url(page_html):
+                logger.info("Direct curl_cffi mode succeeded (cookie bypass)")
+            else:
+                logger.info("Direct curl_cffi mode failed or no m3u8 found, falling back to browser")
+                page_html = None
+
+        # Fallback: browser mode (launches Chromium via Patchright)
+        if not page_html:
+            logger.info("Using browser mode (Patchright Chromium) to bypass Cloudflare")
+            page_html = self.network.get(url, use_browser=True)
+
         if not page_html:
             logger.error("Failed to fetch page HTML")
             return None
@@ -246,3 +261,55 @@ class JableExtractor(BaseExtractor):
                 break
 
         return urls
+
+    @staticmethod
+    def extract_grid_thumbnails(html: str, base_url: str = "https://jable.tv") -> list[dict]:
+        """Extract video thumbnails from jable.tv grid pages (liked/watch-later).
+
+        Returns list of { code, title, url, thumbnail_url } dicts.
+        """
+        results: list[dict] = []
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "html.parser")
+            cards = soup.select("div.video-img-box, div.img-box, a[href*='/videos/']")
+            seen = set()
+            for card in cards:
+                href = ""
+                if card.name == "a":
+                    href = card.get("href", "")
+                else:
+                    link = card.select_one("a[href*='/videos/']")
+                    if link:
+                        href = link.get("href", "")
+                if not href or "/videos/" not in href:
+                    continue
+                href_full = urljoin(base_url, href)
+                if href_full in seen:
+                    continue
+                seen.add(href_full)
+                code = href.strip("/").split("/")[-1]
+                if not code:
+                    continue
+
+                thumb = ""
+                img = card.select_one("img")
+                if img:
+                    # data-src has the real image (lazy-loaded); src is usually a placeholder
+                    thumb_src = img.get("data-src") or img.get("src") or ""
+                    thumb = urljoin(base_url, thumb_src)
+                title = (img.get("alt") or img.get("title") or "").strip() if img else ""
+                if not title:
+                    title_el = card.select_one(".video-title, .title, h5, h4, h3")
+                    if title_el:
+                        title = title_el.get_text(strip=True)
+
+                results.append({
+                    "code": code,
+                    "title": title or code,
+                    "url": href_full,
+                    "thumbnail_url": thumb,
+                })
+        except Exception:
+            pass
+        return results

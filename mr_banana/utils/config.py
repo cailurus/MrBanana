@@ -181,6 +181,9 @@ class AppConfig:
 
     javdb_cookie: str = ""
     javbus_cookie: str = ""
+    jable_cookie: str = ""
+    jable_session_cookie: str = ""
+    jable_username: str = ""
 
     def __post_init__(self) -> None:
         # User requested deterministic upstream ordering + fallback semantics.
@@ -380,6 +383,28 @@ class AppConfig:
             if s not in union:
                 union.append(s)
         return [s for s in _SOURCE_ORDER if s in union]
+
+    @staticmethod
+    def parse_cookie_string(raw: str) -> dict[str, str]:
+        """Parse a cookie header string into a dict.
+
+        Accepts formats like:
+          - "cf_clearance=abc123"
+          - "cf_clearance=abc123; __cf_bm=xyz"
+        """
+        cookies: dict[str, str] = {}
+        if not raw or not raw.strip():
+            return cookies
+        for part in raw.split(";"):
+            part = part.strip()
+            if "=" not in part:
+                continue
+            key, _, val = part.partition("=")
+            key = key.strip()
+            val = val.strip()
+            if key:
+                cookies[key] = val
+        return cookies
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary for serialization."""

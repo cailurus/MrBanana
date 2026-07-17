@@ -80,12 +80,14 @@ class NetworkHandler:
         retry: int = 3,
         delay: int = 2,
         timeout: int = 10,
-        proxies: Optional[Dict[str, str]] = None
+        proxies: Optional[Dict[str, str]] = None,
+        cookies: Optional[Dict[str, str]] = None,
     ):
         self.retry = retry
         self.delay = delay
         self.timeout = timeout
         self.proxies = proxies
+        self.cookies = cookies
         self.headers = {
             "User-Agent": WINDOWS_USER_AGENT,
         }
@@ -96,7 +98,7 @@ class NetworkHandler:
                 proxy_url = proxies.get("https") or proxies.get("http")
         except Exception:
             proxy_url = None
-        self.browser_manager = BrowserManager(proxy_url=proxy_url)
+        self.browser_manager = BrowserManager(proxy_url=proxy_url, cookies=cookies)
 
     def get(self, url: str, use_browser: bool = False, headers: Optional[Dict[str, str]] = None) -> Optional[str]:
         """
@@ -112,13 +114,17 @@ class NetworkHandler:
         return self._get_with_requests(url, headers=headers)
 
     def _get_with_requests(self, url: str, headers: Optional[Dict[str, str]] = None) -> Optional[str]:
-        """使用 requests 发起请求"""
+        """使用 curl_cffi 发起请求（模拟 Chrome TLS 指纹）"""
         apply_curl_dns_resolve(self._session, url)
         for attempt in range(self.retry):
             try:
                 merged_headers = dict(self.headers)
                 if headers:
                     merged_headers.update(headers)
+                # Inject cookies from config as Cookie header if available
+                if self.cookies:
+                    cookie_str = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
+                    merged_headers["Cookie"] = cookie_str
                 response = self._session.get(
                     url=url,
                     headers=merged_headers,

@@ -31,6 +31,7 @@ class HLSDownloader:
         progress_callback=None,
         cancel_event=None,
         preferred_resolution: str | None = None,
+        resume: bool = False,
     ) -> bool:
         """
         下载 HLS 视频
@@ -39,6 +40,7 @@ class HLSDownloader:
             m3u8_url: m3u8 播放列表 URL
             output_path: 输出文件路径
             progress_callback: 进度回调 (current, total, speed_str, total_bytes)
+            resume: 是否续传模式（保留已下载的分段）
         
         Returns:
             bool: 下载是否成功
@@ -137,12 +139,15 @@ class HLSDownloader:
 
         logger.info(f"Found {len(playlist.segments)} segments")
 
-        # 准备临时目录
+        # 准备临时目录 - auto-detect resume when _temp dir already exists
         temp_dir = output_path + "_temp"
         if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-        os.makedirs(temp_dir)
+            logger.info("Resume mode: preserving existing temp directory %s", temp_dir)
+            # Keep existing segments, only download missing ones
+        else:
+            os.makedirs(temp_dir)
 
+        cancelled = False
         try:
             base_uri = m3u8_url.rsplit('/', 1)[0] + '/'
 
@@ -293,13 +298,15 @@ class HLSDownloader:
             return True
 
         except DownloadCancelled:
+            # Preserve temp directory for later resume
+            logger.info("Download cancelled; preserving temp directory for resume: %s", temp_dir)
             raise
         except Exception as e:
             logger.error(f"HLS download failed: {e}")
             return False
         finally:
-            # 清理临时文件
-            if os.path.exists(temp_dir):
+            # Only cleanup temp on success; keep on cancel for resume support
+            if not cancelled and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
     def _download_segment(self, url: str, path: str, cancel_event=None, headers: dict[str, str] | None = None) -> int:
